@@ -1,0 +1,2153 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Content Fetcher & Format Checker</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&family=Poppins:wght@600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/theme/default.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/theme/darcula.min.css">
+
+  <style>
+    :root {
+      /* Base Colors */
+      --color-blue: #007bff;
+      --color-green: #28a745;
+      --color-red: #dc3545;
+      --color-cyan: #17a2b8;
+      --color-yellow: #ffc107;
+      --color-gray-500: #6c757d;
+      --color-gray-800: #343a40;
+      --color-gray-900: #212529;
+
+      /* Light Mode Palette */
+      --body-bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --border-color: #dee2e6;
+      --text-color: var(--color-gray-800);
+      --heading-color: var(--color-gray-900);
+      --light-text-on-dark: #f8f9fa;
+
+      /* Dark Mode Palette */
+      --dark-body-bg: #1a1a1a;
+      --dark-card-bg-level-1: #252525;
+      --dark-card-bg-level-2: #2f2f2f;
+      --dark-border-color: #444;
+      --dark-text-color: #e0e0e0;
+      --dark-heading-color: #f0f0f0;
+
+      /* Accent Colors */
+      --primary-accent: var(--color-blue);
+      --success-accent: var(--color-green);
+      --danger-accent: var(--color-red);
+      --info-accent: var(--color-cyan);
+      --warning-accent: var(--color-yellow);
+
+      /* Highlight & Diff Colors */
+      --error-highlight-bg: #ffebeb;
+      --error-highlight-border: #f08080;
+      --warning-highlight-bg: #fff8e1; /* Yellowish for warnings like inline styles */
+      --warning-highlight-border: #ffe599;
+      --custom-highlight-bg: #d1e7dd; /* Green for custom rules */
+      --custom-highlight-border: #a3cfbb;
+      --dark-error-highlight-bg: #5f3333;
+      --dark-error-highlight-border: #cc6666;
+      --dark-warning-highlight-bg: #4a412a;
+      --dark-warning-highlight-border: #8d7b4e;
+      --dark-custom-highlight-bg: #0a3622; /* Dark green */
+      --dark-custom-highlight-border: #1a5c3a;
+      --diff-added-bg: #e6ffed;
+      --diff-removed-bg: #ffeef0;
+      --dark-diff-added-bg: #2c5a34;
+      --dark-diff-removed-bg: #5a2c34;
+
+      /* Shadows & Spacing */
+      --box-shadow-light: rgba(0, 0, 0, 0.08) 0px 4px 12px;
+      --box-shadow-dark: rgba(0, 0, 0, 0.3) 0px 4px 12px;
+      --border-radius-primary: 0.75rem;
+      --transition-speed: 0.3s ease-in-out;
+    }
+
+    /* --- Base Styles --- */
+    body { font-family: 'Inter', sans-serif; background-color: var(--body-bg); color: var(--text-color); transition: background-color var(--transition-speed), color var(--transition-speed); }
+    h1, h4, h3, h5 { font-family: 'Poppins', sans-serif; color: var(--heading-color); }
+    .card-modern { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--border-radius-primary); box-shadow: var(--box-shadow-light); padding: 1.5rem; transition: all var(--transition-speed); }
+    .preview { background: var(--card-bg); padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--border-radius-primary); min-height: 120px; overflow-wrap: break-word; font-family: 'Fira Code', monospace; font-size: 0.95em; line-height: 1.6; white-space: pre-wrap; }
+    
+    .highlight { padding: 2px; display: inline; border-radius: 3px; cursor: help; }
+    .error-highlight { background-color: var(--error-highlight-bg); border: 1px dashed var(--error-highlight-border); }
+    .warning-highlight { background-color: var(--warning-highlight-bg); border: 1px dashed var(--warning-highlight-border); }
+    .custom-rule-highlight { background-color: var(--custom-highlight-bg); border: 1px dashed var(--custom-highlight-border); }
+
+
+    /* --- CodeMirror Styles --- */
+    .textarea-container { border-radius: var(--border-radius-primary); overflow: hidden; box-shadow: var(--box-shadow-light); }
+    .CodeMirror { height: 250px; font-family: 'Fira Code', monospace; font-size: 0.95em; line-height: 1.5; border: 1px solid var(--border-color); border-radius: var(--border-radius-primary); }
+
+    /* --- Button Styles --- */
+    .btn { border-radius: var(--border-radius-primary); padding: 0.6rem 1.2rem; font-weight: 500; transition: transform 0.2s ease, box-shadow 0.2s ease, background-color var(--transition-speed); }
+    .btn:hover { transform: translateY(-2px); box-shadow: rgba(0, 0, 0, 0.15) 0px 6px 10px -2px, rgba(0, 0, 0, 0.1) 0px 4px 6px -2px; }
+    .btn:disabled { transform: none; box-shadow: none; }
+    .btn-primary { background-color: var(--primary-accent); border-color: var(--primary-accent); color: var(--light-text-on-dark); }
+    .btn-warning { background-color: var(--warning-accent); border-color: var(--warning-accent); color: var(--color-gray-900); }
+    .btn-info { background-color: var(--info-accent); border-color: var(--info-accent); color: var(--light-text-on-dark); }
+    .btn-secondary { background-color: var(--color-gray-500); border-color: var(--color-gray-500); color: var(--light-text-on-dark); }
+    .btn-outline-dark { border-color: var(--color-gray-500); color: var(--color-gray-500); }
+    .btn-outline-dark:hover { background-color: var(--color-gray-500); color: var(--card-bg); }
+    .btn-sm.btn-danger, .btn-sm.btn-secondary { padding: 0.1rem 0.4rem; font-size: 0.8rem; }
+    .btn .icon { margin-right: 0.5rem; }
+
+    /* --- Diff View Styles --- */
+    .diff-container { display: flex; gap: 1.5rem; font-family: 'Fira Code', monospace; font-size: 0.9em; }
+    .diff-panel { flex: 1; background-color: var(--body-bg); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border-color); white-space: pre-wrap; word-wrap: break-word; }
+    .diff-added { background-color: var(--diff-added-bg); display: block; }
+    .diff-removed { background-color: var(--diff-removed-bg); text-decoration: line-through; display: block; }
+    .diff-inline-added { background-color: var(--diff-added-bg); text-decoration: none; padding: 2px; border-radius: 3px; }
+    .diff-inline-removed { background-color: var(--diff-removed-bg); text-decoration: line-through; padding: 2px; border-radius: 3px; }
+
+    /* --- Report Sidebar --- */
+    #report-sidebar {
+        height: 100vh;
+        position: sticky;
+        top: 1rem;
+    }
+    #report-pane-container {
+        height: 100%;
+        overflow-y: auto;
+    }
+    #report-pane-container a {
+        color: inherit;
+        text-decoration: none;
+    }
+    #report-pane-container a:hover {
+        text-decoration: underline;
+    }
+
+
+    /* --- Dark Mode Overrides --- */
+    html[data-bs-theme="dark"] { --body-bg: var(--dark-body-bg); --card-bg: var(--dark-card-bg-level-1); --border-color: var(--dark-border-color); --text-color: var(--dark-text-color); --heading-color: var(--dark-heading-color); --box-shadow-light: var(--box-shadow-dark); --error-highlight-bg: var(--dark-error-highlight-bg); --error-highlight-border: var(--dark-error-highlight-border); --warning-highlight-bg: var(--dark-warning-highlight-bg); --warning-highlight-border: var(--dark-warning-highlight-border); --custom-highlight-bg: var(--dark-custom-highlight-bg); --custom-highlight-border: var(--dark-custom-highlight-border); --diff-added-bg: var(--dark-diff-added-bg); --diff-removed-bg: var(--dark-diff-removed-bg); --primary-accent: #6fa8dc; --warning-accent: #ffca28; --info-accent: #5ac8e8; }
+    html[data-bs-theme="dark"] .btn:hover { box-shadow: rgba(0, 0, 0, 0.3) 0px 6px 10px -2px, rgba(0, 0, 0, 0.2) 0px 4px 6px -2px; }
+    html[data-bs-theme="dark"] .CodeMirror { background-color: var(--dark-card-bg-level-1) !important; color: var(--dark-text-color); border-color: var(--dark-border-color); }
+    html[data-bs-theme="dark"] .CodeMirror-gutters { background-color: var(--dark-card-bg-level-2) !important; border-right: 1px solid var(--dark-border-color); }
+    html[data-bs-theme="dark"] .CodeMirror-cursor { border-left-color: var(--dark-text-color) !important; }
+    html[data-bs-theme="dark"] .btn-outline-dark { border-color: var(--dark-text-color); color: var(--dark-text-color); }
+    html[data-bs-theme="dark"] .btn-outline-dark:hover { background-color: var(--dark-text-color); color: var(--dark-body-bg); }
+    html[data-bs-theme="dark"] .btn-warning { color: var(--color-gray-900); }
+    
+    .modal-content {
+        width: 80%;
+        margin: 25px auto;
+    }
+
+    /* --- Fetcher-Specific Styles --- */
+    .image-preview{max-width:100%;border-radius:8px;margin:10px 0}
+    .image-preview-small{max-width:250px;height:auto;border-radius:8px;margin:10px 0}
+    .small-muted{color:#6c757d;font-size:.9rem}
+    .copy-btn, .send-to-checker-btn, .send-to-compare-btn {
+      transition: all 0.2s;
+      padding: 0.2rem 0.6rem;
+      font-size: 0.8rem;
+      margin-left: 0.25rem;
+    }
+    .copy-btn.copied {
+        background-color: #28a745; /* Green for success */
+        border-color: #28a745;
+        color: white;
+    }
+    #imageHeadline, #snippetTitle {
+        font-weight: 500;
+        font-size: 1rem;
+    }
+    /* Ensure main tabs have padding */
+    .tab-content {
+        padding-top: 1.5rem;
+    }
+    /* Sub-tabs (MPP/Inbox) */
+    #fetcher-pane .tab-content {
+        border-top: none;
+        padding-top: 1rem;
+    }
+    .fetcher-card-header {
+        background-color: transparent;
+        border-bottom: 1px solid var(--border-color);
+        padding: 0.75rem 0;
+        margin-bottom: 1rem;
+    }
+    html[data-bs-theme="dark"] .fetcher-card-header {
+        border-bottom-color: var(--dark-border-color);
+    }
+    .data-label {
+        color: var(--color-gray-500);
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    html[data-bs-theme="dark"] .data-label {
+        color: var(--color-gray-500);
+    }
+
+  </style>
+</head>
+<body>
+<div class="container-fluid px-5 py-5">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="text-primary">🛠️ Content Fetcher & Format Checker</h1>
+    <button class="btn btn-outline-dark" id="darkModeToggle">🌙 Toggle Theme</button>
+  </div>
+
+  <!-- API FETCHER BAR -->
+  <div class="card-modern mb-4">
+    <h3 class="mb-3">🔗 API Content Fetcher</h3>
+    <div class="row g-3 align-items-center mb-3">
+      <div class="col-md-9"><input id="betmgmId" class="form-control" placeholder="Enter Promotion/Campaign ID (e.g. 3820de0c-fd4e-4ecc-893f-b75183f80eec) or full path (/id/...)"></div>
+      <div class="col-md-3 d-grid"><button id="fetchBtn" class="btn btn-primary">Fetch Data</button></div>
+    </div>
+    <div id="fetcherError" class="text-danger mt-3"></div>
+    <div class="small-muted mt-2">Fetches content data, auto-detects type (MPP, Inbox, or Tournament), and displays key fields.</div>
+  </div>
+
+  <!-- MAIN TAB NAVIGATION -->
+  <ul class="nav nav-tabs" id="main-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="main-checker-tab" data-bs-toggle="tab" data-bs-target="#checker-pane" type="button" role="tab" aria-controls="checker-pane" aria-selected="true">Format Checker & Diff</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="main-fetcher-tab" data-bs-toggle="tab" data-bs-target="#fetcher-pane" type="button" role="tab" aria-controls="fetcher-pane" aria-selected="false">Fetched Content Viewer</button>
+    </li>
+  </ul>
+
+  <!-- MAIN TAB CONTENT -->
+  <div class="tab-content" id="main-tabs-content">
+    
+    <!-- ================================== -->
+    <!--     FORMAT CHECKER PANE            -->
+    <!-- ================================== -->
+    <div class="tab-pane fade show active" id="checker-pane" role="tabpanel" aria-labelledby="main-checker-tab" tabindex="0">
+        <div class="row g-4">
+            <!-- Main Content Column -->
+            <div class="col-lg-8">
+                <div class="row g-4">
+                    <!-- Main Editor -->
+                    <div class="col-md-6">
+                        <div class="card-modern h-100 d-flex flex-column">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <label for="htmlInput" class="form-label mb-0">Paste your HTML content:</label>
+                                <button class="btn btn-sm btn-danger" id="clearMainBtn">Clear</button>
+                            </div>
+                            <div class="textarea-container flex-grow-1">
+                                <textarea id="htmlInput" class="form-control"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Compare Editor -->
+                    <div class="col-md-6">
+                        <div class="card-modern h-100 d-flex flex-column">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <label for="compareInput" class="form-label mb-0">Paste text to compare:</label>
+                                <button class="btn btn-sm btn-danger" id="clearCompareBtn">Clear</button>
+                            </div>
+                            <div class="textarea-container flex-grow-1">
+                                <textarea id="compareInput" class="form-control"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-modern my-4">
+                    <div class="d-flex flex-wrap gap-3">
+                    <button class="btn btn-primary" id="renderBtn"><span class="icon">🖼️</span>Render HTML</button>
+                    <button class="btn btn-warning" id="compareBtn"><span class="icon">🔄</span>Compare Texts</button>
+                    <button class="btn btn-info" id="copyToClipboardBtn"><span class="icon">📋</span>Copy Main Text</button>
+                    </div>
+                </div>
+
+                <div class="card-modern mb-4">
+                    <label class="form-label mb-3">Filter Built-in Issues:</label><br>
+                    <div id="builtInFiltersContainer" class="d-flex flex-wrap">
+                    <!-- Checkboxes will be dynamically inserted here -->
+                    </div>
+                </div>
+
+                <!-- Custom Error Rules Section -->
+                <div class="card-modern mb-4">
+                    <h4 class="mb-3">Custom Error Rules</h4>
+                    <div id="customRulesContainer"></div>
+                    <div class="row g-3 align-items-center mb-3">
+                        <div class="col-sm-4">
+                            <input type="text" class="form-control" id="customRuleName" placeholder="Rule Name (e.g., Find TODO)">
+                        </div>
+                        <div class="col-sm-6">
+                            <input type="text" class="form-control" id="customRuleText" placeholder='Text to find (e.g., $40 or href="#")'>
+                        </div>
+                        <div class="col-sm-2">
+                            <button class="btn btn-primary w-100" id="addCustomRuleBtn">Add Rule</button>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 class="mt-5 mb-3 text-center">🔍 Live Source Code Preview (with highlights)</h4>
+                <div id="preview" class="preview"></div>
+            </div>
+            
+            <!-- Report Sidebar -->
+            <div class="col-lg-4">
+                <div id="report-sidebar">
+                    <div class="card-modern h-100 d-flex flex-column">
+                        <h4 class="mb-3">Real-time Report</h4>
+                        <div id="report-pane-container">
+                            <div id="output"></div>
+                            <div id="customOutput" class="mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================== -->
+    <!--   FETCHED CONTENT VIEWER PANE      -->
+    <!-- ================================== -->
+    <div class="tab-pane fade" id="fetcher-pane" role="tabpanel" aria-labelledby="main-fetcher-tab" tabindex="1">
+        
+        <!-- SUB-TAB NAVIGATION (MPP/Inbox/Tournament) -->
+        <ul class="nav nav-tabs" id="contentTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="mpp-tab" data-bs-toggle="tab" data-bs-target="#mpp-pane" type="button" role="tab" aria-controls="mpp-pane" aria-selected="true" data-tab-type="mpp">MPP Content</button>
+            </li>
+            <li class="nav-item" role="presentation">
+            <button class="nav-link" id="inbox-tab" data-bs-toggle="tab" data-bs-target="#inbox-pane" type="button" role="tab" aria-controls="inbox-pane" aria-selected="false" data-tab-type="inbox">Inbox Content</button>
+            </li>
+            <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tournament-tab" data-bs-toggle="tab" data-bs-target="#tournament-pane" type="button" role="tab" aria-controls="tournament-pane" aria-selected="false" data-tab-type="tournament">Tournament</button>
+            </li>
+        </ul>
+
+        <!-- SUB-TAB CONTENT (MPP/Inbox/Tournament) -->
+        <div class="tab-content" id="contentTabsContent">
+            
+            <!-- MPP Pane -->
+            <div class="tab-pane fade show active" id="mpp-pane" role="tabpanel" aria-labelledby="mpp-tab" tabindex="0">
+                <div id="mppResultArea" class="d-none">
+                    
+                    <div class="card-modern mb-3">
+                        <div class="d-flex justify-content-between align-items-center fetcher-card-header">
+                            <h5 class="mb-0">🏷️ Promotion Title</h5>
+                            <button class="btn btn-sm btn-outline-primary copy-btn" data-target="promoTitle" title="Copy text">Copy</button>
+                        </div>
+                        <h4 id="promoTitle" class="mb-0"></h4>
+                    </div>
+
+                    <div class="card-modern mb-3">
+                        <div class="d-flex justify-content-between align-items-center fetcher-card-header">
+                            <h5 class="mb-0">✍️ Image Headline</h5>
+                            <button class="btn btn-sm btn-outline-primary copy-btn" data-target="imageHeadline" title="Copy text">Copy</button>
+                        </div>
+                        <p id="imageHeadline" class="mt-1 mb-0 p-1 fs-5"></p> 
+                    </div>
+
+                    <div class="card-modern mb-3">
+                        <h5 class="fetcher-card-header mb-0">🖼️ Image</h5>
+                        <img id="promoImage" class="image-preview" src="" alt="Promotion image" style="display:none"/>
+                        <div id="imageHint" class="small-muted"></div>
+                    </div>
+
+                    <div class="card-modern mb-3">
+                        <div class="d-flex justify-content-between align-items-center fetcher-card-header">
+                            <h5 class="mb-0">🧾 Detailed Description (HTML)</h5>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-success send-to-checker-btn" data-target="promoDescription" title="Send to Format Checker">Send to Checker</button>
+                                <button class="btn btn-sm btn-info send-to-compare-btn" data-target="promoDescription" title="Send to Compare Editor">Send to Compare</button>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="promoDescription" data-content-type="html" title="Copy raw HTML">Copy HTML</button>
+                            </div>
+                        </div>
+                        <div id="promoDescription" class="px-1"></div>
+                    </div>
+
+                    <div class="card-modern mb-3">
+                        <div class="d-flex justify-content-between align-items-center fetcher-card-header">
+                            <h5 class="mb-0">📜 Terms & Conditions (HTML)</h5>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-success send-to-checker-btn" data-target="promoTerms" title="Send to Format Checker">Send to Checker</button>
+                                <button class="btn btn-sm btn-info send-to-compare-btn" data-target="promoTerms" title="Send to Compare Editor">Send to Compare</button>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="promoTerms" data-content-type="html" title="Copy raw HTML">Copy HTML</button>
+                            </div>
+                        </div>
+                        <div id="promoTerms" class="px-1"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- INBOX Pane -->
+            <div class="tab-pane fade" id="inbox-pane" role="tabpanel" aria-labelledby="inbox-tab" tabindex="0">
+                <div id="inboxResultArea" class="d-none">
+                    
+                    <div class="card-modern mb-3">
+                        <h5 class="card-title text-primary mb-3">⭐ Campaign Common Data</h5>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Title (`commontitle`)</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="inboxTitle" title="Copy text">Copy</button>
+                            </div>
+                            <p id="inboxTitle" class="mb-0 pt-2 px-1 fs-5"></p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Description (`commondescription`)</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="inboxDescription" title="Copy text">Copy</button>
+                            </div>
+                            <p id="inboxDescription" class="mb-0 pt-2 px-1"></p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Terms (`commontermsandconditions`)</span>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-success send-to-checker-btn" data-target="inboxTerms" title="Send to Format Checker">Send to Checker</button>
+                                    <button class="btn btn-sm btn-info send-to-compare-btn" data-target="inboxTerms" title="Send to Compare Editor">Send to Compare</button>
+                                    <button class="btn btn-sm btn-outline-primary copy-btn" data-target="inboxTerms" data-content-type="html" title="Copy HTML">Copy HTML</button>
+                                </div>
+                            </div>
+                            <div id="inboxTerms" class="mb-0 pt-2 px-1"></div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div class="border-bottom mb-2 pb-2"><span class="data-label">🖼️ Landscape Image</span></div>
+                                <img id="inboxImageLandscape" class="image-preview-small" src="" alt="Landscape image" style="display:none"/>
+                                <div id="inboxImageLandscapeHint" class="small-muted"></div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div class="border-bottom mb-2 pb-2"><span class="data-label">🖼️ Square Image</span></div>
+                                <img id="inboxImageSquare" class="image-preview-small" src="" alt="Square image" style="display:none"/>
+                                <div id="inboxImageSquareHint" class="small-muted"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-modern mb-3">
+                        <h5 class="card-title text-primary mb-3">📧 Inbox Preview Data</h5>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Snippet Title (`snippettitle`)</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="snippetTitle" title="Copy text">Copy</button>
+                            </div>
+                            <p id="snippetTitle" class="mb-0 pt-2 px-1 fs-5"></p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Snippet Description (`snippetdescription`)</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="snippetDescription" title="Copy text">Copy</button>
+                            </div>
+                            <p id="snippetDescription" class="mb-0 pt-2 px-1"></p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Manual Terms (`manualtermsandconditions`)</span>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-success send-to-checker-btn" data-target="manualTerms" title="Send to Format Checker">Send to Checker</button>
+                                    <button class="btn btn-sm btn-info send-to-compare-btn" data-target="manualTerms" title="Send to Compare Editor">Send to Compare</button>
+                                    <button class="btn btn-sm btn-outline-primary copy-btn" data-target="manualTerms" data-content-type="html" title="Copy raw HTML">Copy HTML</button>
+                                </div>
+                            </div>
+                            <div id="manualTerms" class="mb-0 pt-2 px-1"></div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div class="border-bottom mb-2 pb-2"><span class="data-label">🖼️ Short Image</span></div>
+                                <img id="shortImage" class="image-preview-small" src="" alt="Short image" style="display:none"/>
+                                <div id="shortImageHint" class="small-muted"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-modern mb-3">
+                        <h5 class="card-title text-primary mb-3">🍞 Toaster Data</h5>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Title (`toastertitle`)</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="toasterTitle" title="Copy text">Copy</button>
+                            </div>
+                            <p id="toasterTitle" class="mb-0 pt-2 px-1"></p>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Description (`toasterdescription`)</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="toasterDescription" title="Copy text">Copy</button>
+                            </div>
+                            <p id="toasterDescription" class="mb-0 pt-2 px-1"></p>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div class="border-bottom mb-2 pb-2"><span class="data-label">🖼️ Image (`tosterimage`)</span></div>
+                                <img id="toasterImage" class="image-preview-small" src="" alt="Toaster image" style="display:none"/>
+                                <div id="toasterImageHint" class="small-muted"></div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                    <span class="data-label">CTA (`toastercta`)</span>
+                                    <button class="btn btn-sm btn-outline-primary copy-btn" data-target="toasterCta" title="Copy text">Copy</button>
+                                </div>
+                                <p id="toasterCta" class="mb-0 pt-2 px-1"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-modern mb-3">
+                        <h5 class="card-title text-primary mb-3">✨ Overlay Data</h5>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Title (`overlaytitle`)</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="overlayTitle" title="Copy text">Copy</button>
+                            </div>
+                            <p id="overlayTitle" class="mb-0 pt-2 px-1"></p>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Description (`overlaydescription`)</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="overlayDescription" title="Copy text">Copy</button>
+                            </div>
+                            <p id="overlayDescription" class="mb-0 pt-2 px-1"></p>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div class="border-bottom mb-2 pb-2"><span class="data-label">🖼️ Image (`overlayimage`)</span></div>
+                                <img id="overlayImage" class="image-preview-small" src="" alt="Overlay image" style="display:none"/>
+                                <div id="overlayImageHint" class="small-muted"></div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                    <span class="data-label">CTA (`overlaycta`)</span>
+                                    <button class="btn btn-sm btn-outline-primary copy-btn" data-target="overlayCta" title="Copy text">Copy</button>
+                                </div>
+                                <p id="overlayCta" class="mb-0 pt-2 px-1"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-modern mb-3">
+                        <h5 class="card-title text-primary mb-3">⚙️ Miscellaneous Data</h5>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">CTA Native Link (`ctanativelink`)</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="ctaNativeLink" title="Copy text">Copy</button>
+                            </div>
+                            <p id="ctaNativeLink" class="mb-0 pt-2 px-1"></p>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Show Manual T&Cs (`showmanualtermsandconditions`)</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="showManualTerms" title="Copy text">Copy</button>
+                            </div>
+                            <p id="showManualTerms" class="mb-0 pt-2 px-1"></p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- TOURNAMENT Pane -->
+            <div class="tab-pane fade" id="tournament-pane" role="tabpanel" aria-labelledby="tournament-tab" tabindex="0">
+                <div id="tournamentResultArea" class="d-none">
+                    
+                    <div class="card-modern mb-3">
+                        <h5 class="card-title text-primary mb-3">🏆 Tournament Details</h5>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Title</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="tournamentTitle" title="Copy text">Copy</button>
+                            </div>
+                            <p id="tournamentTitle" class="mb-0 pt-2 px-1 fs-5"></p>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Description (HTML)</span>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-success send-to-checker-btn" data-target="tournamentDescription" title="Send to Format Checker">Send to Checker</button>
+                                    <button class="btn btn-sm btn-info send-to-compare-btn" data-target="tournamentDescription" title="Send to Compare Editor">Send to Compare</button>
+                                    <button class="btn btn-sm btn-outline-primary copy-btn" data-target="tournamentDescription" data-content-type="html" title="Copy HTML">Copy HTML</button>
+                                </div>
+                            </div>
+                            <div id="tournamentDescription" class="mb-0 pt-2 px-1"></div>
+                        </div>
+                    </div>
+
+                    <div class="card-modern mb-3">
+                        <h5 class="card-title text-primary mb-3">📝 Synopsis</h5>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Synopsis Title</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="synopsisTitle" title="Copy text">Copy</button>
+                            </div>
+                            <p id="synopsisTitle" class="mb-0 pt-2 px-1 fs-5"></p>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Synopsis Description</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="synopsisDescription" title="Copy text">Copy</button>
+                            </div>
+                            <p id="synopsisDescription" class="mb-0 pt-2 px-1"></p>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div class="border-bottom mb-2 pb-2"><span class="data-label">🖼️ Synopsis Image</span></div>
+                                <img id="synopsisImage" class="image-preview-small" src="" alt="Synopsis image" style="display:none"/>
+                                <div id="synopsisImageHint" class="small-muted"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-modern mb-3">
+                        <h5 class="card-title text-primary mb-3">🖼️ Imagery & Content</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div class="border-bottom mb-2 pb-2"><span class="data-label">🖼️ Hero Image</span></div>
+                                <img id="heroImage" class="image-preview" src="" alt="Hero image" style="display:none"/>
+                                <div id="heroImageHint" class="small-muted"></div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Main Content 1 (HTML)</span>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-success send-to-checker-btn" data-target="mainContent1" title="Send to Format Checker">Send to Checker</button>
+                                    <button class="btn btn-sm btn-info send-to-compare-btn" data-target="mainContent1" title="Send to Compare Editor">Send to Compare</button>
+                                    <button class="btn btn-sm btn-outline-primary copy-btn" data-target="mainContent1" data-content-type="html" title="Copy HTML">Copy HTML</button>
+                                </div>
+                            </div>
+                            <div id="mainContent1" class="mb-0 pt-2 px-1"></div>
+                        </div>
+                    </div>
+
+                    <div class="card-modern mb-3">
+                        <h5 class="card-title text-primary mb-3">📜 Terms & Conditions</h5>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Terms (HTML)</span>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-success send-to-checker-btn" data-target="tournamentTerms" title="Send to Format Checker">Send to Checker</button>
+                                    <button class="btn btn-sm btn-info send-to-compare-btn" data-target="tournamentTerms" title="Send to Compare Editor">Send to Compare</button>
+                                    <button class="btn btn-sm btn-outline-primary copy-btn" data-target="tournamentTerms" data-content-type="html" title="Copy HTML">Copy HTML</button>
+                                </div>
+                            </div>
+                            <div id="tournamentTerms" class="mb-0 pt-2 px-1"></div>
+                        </div>
+                    </div>
+
+                    <div class="card-modern mb-3">
+                        <h5 class="card-title text-primary mb-3">⚙️ Miscellaneous</h5>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                                <span class="data-label">Condition Field</span>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" data-target="tournamentCondition" title="Copy text">Copy</button>
+                            </div>
+                            <p id="tournamentCondition" class="mb-0 pt-2 px-1"></p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+  </div>
+</div>
+
+<!-- Render Modal -->
+<div class="modal fade" id="renderModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Rendered HTML Output</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="renderModalBody" class="p-3" style="font-family: var(--bs-body-font-family); font-size: var(--bs-body-font-size);"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Comparison Modal -->
+<div class="modal fade" id="compareModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Text Comparison</h5>
+        <div class="btn-group" role="group">
+            <input type="radio" class="btn-check" name="diff-view" id="side-by-side-view" autocomplete="off" checked>
+            <label class="btn btn-outline-primary" for="side-by-side-view">Side-by-Side</label>
+
+            <input type="radio" class="btn-check" name="diff-view" id="inline-view" autocomplete="off">
+            <label class="btn btn-outline-primary" for="inline-view">Inline</label>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="container-fluid">
+          <div class="row" id="diffTitles">
+            <div class="col-md-6"><h4 class="text-center mb-3">Original Text</h4></div>
+            <div class="col-md-6"><h4 class="text-center mb-3">Comparison Text</h4></div>
+          </div>
+          <div class="diff-container" id="diffContainer">
+            <div id="diffBefore" class="diff-panel"></div>
+            <div id="diffAfter" class="diff-panel"></div>
+          </div>
+          <div class="diff-panel" id="diffInline" style="display: none;"></div>
+          <div id="noChangesMessage" class="alert alert-success text-center d-none">
+            No changes detected. The two texts are identical.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
+
+<script id="checker-worker" type="text/worker-script">
+    self.onmessage = function(e) {
+        const { input, customRules, filters } = e.data;
+        
+        const errors = {};
+        const highlights = [];
+
+        function getLineNumber(text, index) {
+            return text.substring(0, index).split('\\n').length;
+        }
+
+        // Initialize error arrays
+        for (const key in filters) {
+            errors[key] = [];
+        }
+        customRules.forEach(rule => errors[rule.name] = []);
+
+        // --- Start Checking ---
+        
+        if (filters.emptyTags) {
+            const emptyTagRegex = /<(p|div|span|h[1-6]|li|a|strong|em|b|i)([^>]*)>\s*<\/\1>/gi;
+            let match;
+            while ((match = emptyTagRegex.exec(input)) !== null) {
+                 errors.emptyTags.push({ line: getLineNumber(input, match.index), html: match[0], tag: match[1], start: match.index });
+                 highlights.push({ start: match.index, end: match.index + match[0].length, class: 'error-highlight', key: 'emptyTags' });
+            }
+        }
+
+        if (filters.nbspErrors) {
+            const nbspRegex = /(&nbsp;|&#160;|\u00A0)/g;
+            let match;
+            while((match = nbspRegex.exec(input)) !== null) {
+                const context = input.substring(Math.max(0, match.index - 20), Math.min(input.length, match.index + match[0].length + 20)).trim();
+                errors.nbspErrors.push({ line: getLineNumber(input, match.index), entity: match[0], context: context, start: match.index });
+                highlights.push({ start: match.index, end: match.index + match[0].length, class: 'error-highlight', key: 'nbspErrors' });
+            }
+        }
+        
+        if (filters.supFormatIssues) {
+            const supRegex = /<sup[^>]*>([^<]*)<\/sup>/gi;
+            let match;
+            while((match = supRegex.exec(input)) !== null) {
+                const content = match[1].trim();
+                if (content === '' || /[^a-zA-Z0-9]/.test(content)) {
+                    errors.supFormatIssues.push({ line: getLineNumber(input, match.index), html: match[0], start: match.index });
+                    highlights.push({ start: match.index, end: match.index + match[0].length, class: 'error-highlight', key: 'supFormatIssues' });
+                }
+            }
+        }
+
+        if (filters.missingOrdinalSup) {
+            const ordinalRegex = /\b(\d{1,2})(st|nd|rd|th)\b/g;
+            let match;
+            while ((match = ordinalRegex.exec(input)) !== null) {
+                const preText = input.substring(Math.max(0, match.index - 6), match.index);
+                if (!preText.endsWith('<sup>')) {
+                    const context = input.substring(Math.max(0, match.index - 20), Math.min(input.length, match.index + match[0].length + 20)).trim();
+                    errors.missingOrdinalSup.push({ line: getLineNumber(input, match.index), text: match[0], context: context, start: match.index });
+                    highlights.push({ start: match.index, end: match.index + match[0].length, class: 'error-highlight', key: 'missingOrdinalSup' });
+                }
+            }
+        }
+
+        if (filters.extraSpacesInTags) {
+            const tagRegex = /<[^>]+>/g;
+            let match;
+            while ((match = tagRegex.exec(input)) !== null) {
+                const fullTag = match[0];
+                if (fullTag.match(/<\s+/) || fullTag.match(/\s+>/) || /\s{2,}/.test(fullTag)) {
+                     errors.extraSpacesInTags.push({ line: getLineNumber(input, match.index), tag: fullTag, start: match.index });
+                     highlights.push({ start: match.index, end: match.index + fullTag.length, class: 'error-highlight', key: 'extraSpacesInTags' });
+                }
+            }
+        }
+        
+        if (filters.invalidHexColors) {
+            const hexColorRegex = /#(?!D4B962|00A35B|D21C5D|F47523|5AC8E8|F00A47|EFE700|474747|E8490D|FFFFFF|000000)([0-9A-Fa-f]{6})\b/gi;
+            let match;
+            while ((match = hexColorRegex.exec(input)) !== null) {
+                 const context = input.substring(Math.max(0, match.index - 20), Math.min(input.length, match.index + match[0].length + 20)).trim();
+                 errors.invalidHexColors.push({ line: getLineNumber(input, match.index), color: match[0], context: context, start: match.index });
+                 highlights.push({ start: match.index, end: match.index + match[0].length, class: 'error-highlight', key: 'invalidHexColors' });
+            }
+        }
+        
+        if (filters.dollarSignSpacing) {
+            const dollarRegex = /\$\s+\d/g;
+            let match;
+            while ((match = dollarRegex.exec(input)) !== null) {
+                 const context = input.substring(Math.max(0, match.index - 20), Math.min(input.length, match.index + match[0].length + 20)).trim();
+                 errors.dollarSignSpacing.push({ line: getLineNumber(input, match.index), text: match[0], context: context, start: match.index });
+                 highlights.push({ start: match.index, end: match.index + match[0].length, class: 'error-highlight', key: 'dollarSignSpacing' });
+            }
+        }
+
+        if (filters.multipleDollarSigns) {
+            const dollarRegex = /\${2,}/g;
+            let match;
+            while ((match = dollarRegex.exec(input)) !== null) {
+                 const context = input.substring(Math.max(0, match.index - 20), Math.min(input.length, match.index + match[0].length + 20)).trim();
+                 errors.multipleDollarSigns.push({ line: getLineNumber(input, match.index), text: match[0], context: context, start: match.index });
+                 highlights.push({ start: match.index, end: match.index + match[0].length, class: 'error-highlight', key: 'multipleDollarSigns' });
+            }
+        }
+
+        if (filters.slashedPriceSequence) {
+            const slashedPriceRegex = /\$?\d+(?:\/\$?\d+){2,}/g; // Find number sequences with 2+ slashes
+            let match;
+            while ((match = slashedPriceRegex.exec(input)) !== null) {
+                 const context = input.substring(Math.max(0, match.index - 20), Math.min(input.length, match.index + match[0].length + 20)).trim();
+                 errors.slashedPriceSequence.push({ line: getLineNumber(input, match.index), text: match[0], context: context, start: match.index });
+                 highlights.push({ start: match.index, end: match.index + match[0].length, class: 'error-highlight', key: 'slashedPriceSequence' });
+            }
+        }
+        
+        if (filters.ampmFormatIssues) {
+             const ampmRegex = /\b(\d{1,2}:\d{2})\s*(am|pm)\b/gi;
+             let match;
+             while ((match = ampmRegex.exec(input)) !== null) {
+                if (match[0] !== (match[1] + ' ' + match[2].toUpperCase())) {
+                    const context = input.substring(Math.max(0, match.index - 20), Math.min(input.length, match.index + match[0].length + 20)).trim();
+                    errors.ampmFormatIssues.push({ line: getLineNumber(input, match.index), text: match[0], context: context, start: match.index });
+                    highlights.push({ start: match.index, end: match.index + match[0].length, class: 'error-highlight', key: 'ampmFormatIssues' });
+                }
+             }
+        }
+
+        /* REMOVED deprecatedTags, missingAltText, and inlineStyles checks */
+
+        if (filters.malformedTags) {
+            const tagStack = [];
+            const tagRegex = /<\/?[a-zA-Z0-9]+\b[^>]*>/g;
+            let match;
+            while ((match = tagRegex.exec(input)) !== null) {
+                const fullTag = match[0];
+                const tagNameMatch = fullTag.match(/<\/?[a-zA-Z0-9]+/);
+                if (!tagNameMatch) continue;
+                const tagName = tagNameMatch[0].replace(/<\/?/, '').toLowerCase();
+                const isClose = fullTag.startsWith('</');
+                const isSelfClosing = fullTag.endsWith('/>');
+                const selfClosingTags = ['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'];
+
+                if (!isClose && !isSelfClosing && !selfClosingTags.includes(tagName)) {
+                    tagStack.push({ tag: tagName, raw: fullTag, line: getLineNumber(input, match.index), start: match.index, end: match.index + fullTag.length });
+                } else if (isClose) {
+                    if (tagStack.length > 0 && tagStack[tagStack.length - 1].tag === tagName) {
+                        tagStack.pop();
+                    } else {
+                        errors.malformedTags.push({ type: 'mismatched_or_unexpected', line: getLineNumber(input, match.index), tag: fullTag, start: match.index });
+                        highlights.push({ start: match.index, end: match.index + fullTag.length, class: 'error-highlight', key: 'malformedTags' });
+                    }
+                }
+            }
+            tagStack.forEach(unclosed => {
+                errors.malformedTags.push({ type: 'unclosed', line: unclosed.line, tag: unclosed.raw, start: unclosed.start });
+                highlights.push({ start: unclosed.start, end: unclosed.end, class: 'error-highlight', key: 'malformedTags' });
+            });
+        }
+
+
+        // Custom Rules
+        customRules.forEach(rule => {
+            if (rule.checked) {
+                try {
+                    const regex = new RegExp(rule.text, 'g');
+                    let match;
+                    while ((match = regex.exec(input)) !== null) {
+                        if (match[0] === "") continue;
+                        if (!errors[rule.name]) errors[rule.name] = [];
+                        errors[rule.name].push({ line: getLineNumber(input, match.index), text: match[0], start: match.index });
+                        highlights.push({ start: match.index, end: match.index + match[0].length, class: 'custom-rule-highlight', key: rule.name });
+                    }
+                } catch (err) {}
+            }
+        });
+
+        self.postMessage({ errors, highlights });
+    };
+</script>
+
+<script>
+// --- START: CONTENT FETCHER SCRIPT ---
+
+const fetcherBaseUrl = "https://api.nj.betmgm.com/V3/content.svc/cms/V5/id/";
+const fetcherQueryParams = "?depth=2&lang=en-US&culture=en-US&environment=prod&x-bwin-accessid=YjYxMDlmMDEtOGE0ZC00ZjkwLWJmMzMtMTk3Zjk4ZWMzYzBl&source=prod";
+
+// --- CANDIDATE FIELD NAMES for JSON/XML parsing ---
+const MPP_TITLE_CANDIDATES = ['promotionTitle', 'promotiontitle', 'title', 'name'];
+const MPP_IMAGE_CANDIDATES = ['image', 'images', 'imageurl', 'url', 'media', 'mediaurl', 'thumbnail', 'src', 'link', 'href'];
+const MPP_IMAGE_HEADLINE_CANDIDATES = ['imageHeadline', 'imageheadline', 'headline', 'imageTitle', 'imageText', 'shortTitle'];
+const MPP_DETAILED_CANDIDATES = ['detailedDescription', 'detaileddescription', 'detailed', 'description', 'body', 'content', 'longdescription', 'htmlcontent'];
+const MPP_TERMS_CANDIDATES = ['termsAndConditions', 'termsandconditions', 'terms', 'termsConditions', 'termsandcondition', 'conditions', 'legalText', 'legal', 'tcContent', 'termContent', 'contentdetails'];
+const INBOX_COMMON_TITLE_CANDIDATES = ['commontitle', 'inboxtitle', 'common_title'];
+const INBOX_COMMON_DESC_CANDIDATES = ['commondescription', 'inboxdescription', 'common_description'];
+const INBOX_COMMON_TERMS_CANDIDATES = ['commontermsandconditions', 'inboxtermsandconditions', 'common_terms'];
+const INBOX_COMMON_IMAGE_LANDSCAPE_CANDIDATES = ['commonimagelandscape', 'imagelandscape', 'image_landscape'];
+const INBOX_COMMON_IMAGE_SQUARE_CANDIDATES = ['commonimagesquare', 'imagesquare', 'image_square'];
+const INBOX_SNIPPET_TITLE_CANDIDATES = ['snippettitle', 'previettitle', 'snippet_title'];
+const INBOX_SNIPPET_DESC_CANDIDATES = ['snippetdescription', 'previewdescription', 'snippet_description'];
+const INBOX_SHORT_IMAGE_CANDIDATES = ['shortimage', 'previewimage', 'short_image'];
+const INBOX_MANUAL_TERMS_CANDIDATES = ['manualtermsandconditions', 'manualterms', 'manualtc', 'termsmanual']; 
+const INBOX_TOASTER_TITLE_CANDIDATES = ['toastertitle', 'toaster_title'];
+const INBOX_TOASTER_DESC_CANDIDATES = ['toasterdescription', 'toaster_description'];
+const INBOX_TOASTER_IMAGE_CANDIDATES = ['toasterimage', 'tosterimage', 'toaster_image'];
+const INBOX_TOASTER_CTA_CANDIDATES = ['toastercta', 'toaster_cta', 'toasterbutton'];
+const INBOX_OVERLAY_TITLE_CANDIDATES = ['overlaytitle', 'overlay_title'];
+const INBOX_OVERLAY_DESC_CANDIDATES = ['overlaydescription', 'overlay_description'];
+const INBOX_OVERLAY_IMAGE_CANDIDATES = ['overlayimage', 'overlay_image'];
+const INBOX_OVERLAY_CTA_CANDIDATES = ['overlaycta', 'overlay_cta', 'overlaybutton'];
+const INBOX_MISC_CTA_LINK_CANDIDATES = ['ctanativelink', 'ctanative', 'nativeurl'];
+const INBOX_MISC_SHOW_MANUAL_TERMS_CANDIDATES = ['showmanualtermsandconditions', 'showmanualterms', 'showterms', 'showmanualtc'];
+
+// --- NEW TOURNAMENT CANDIDATES ---
+const TOURNAMENT_TITLE_CANDIDATES = ['title', 'tournamentTitle', 'name'];
+const TOURNAMENT_DESCRIPTION_CANDIDATES = ['description', 'tournamentDescription', 'summary', 'htmlcontent'];
+const TOURNAMENT_SYNOPSIS_IMAGE_CANDIDATES = ['synopsisimage', 'synopsisImage', 'synopsisImageUrl', 'imageSynopsis'];
+const TOURNAMENT_SYNOPSIS_TITLE_CANDIDATES = ['synopsistitle', 'synopsisTitle', 'synopsisHeader']; // <-- Key detection field
+const TOURNAMENT_SYNOPSIS_DESCRIPTION_CANDIDATES = ['synopsisdescription', 'synopsisDescription', 'synopsisText', 'synopsisBody'];
+const TOURNAMENT_HERO_IMAGE_CANDIDATES = ['heroimage', 'heroImage', 'heroImageUrl', 'imageHero', 'headerImage'];
+const TOURNAMENT_MAIN_CONTENT_1_CANDIDATES = ['maincontent1', 'mainContent1', 'content1', 'mainBody', 'details'];
+const TOURNAMENT_TERMS_CANDIDATES = ['terms', 'termsAndConditions', 'tournamentTerms', 'tcContent'];
+const TOURNAMENT_CONDITION_CANDIDATES = ['condition', 'tournamentCondition', 'conditionField', 'miscCondition'];
+
+
+// --- Common Fetcher Elements ---
+const fetchBtn = document.getElementById('fetchBtn');
+const idField = document.getElementById('betmgmId');
+const fetcherErrorDiv = document.getElementById('fetcherError');
+
+// --- MPP Elements ---
+const mppResultArea = document.getElementById('mppResultArea');
+const promoTitle = document.getElementById('promoTitle');
+const imageHeadline = document.getElementById('imageHeadline');
+const promoImage = document.getElementById('promoImage');
+const imageHint = document.getElementById('imageHint');
+const promoDescription = document.getElementById('promoDescription');
+const promoTerms = document.getElementById('promoTerms');
+
+// --- Inbox Elements ---
+const inboxResultArea = document.getElementById('inboxResultArea');
+const inboxTitle = document.getElementById('inboxTitle');
+const inboxDescription = document.getElementById('inboxDescription');
+const inboxTerms = document.getElementById('inboxTerms');
+const inboxImageLandscape = document.getElementById('inboxImageLandscape');
+const inboxImageSquare = document.getElementById('inboxImageSquare');
+const inboxImageLandscapeHint = document.getElementById('inboxImageLandscapeHint');
+const inboxImageSquareHint = document.getElementById('inboxImageSquareHint');
+const snippetTitle = document.getElementById('snippetTitle');
+const snippetDescription = document.getElementById('snippetDescription');
+const shortImage = document.getElementById('shortImage');
+const shortImageHint = document.getElementById('shortImageHint');
+const manualTerms = document.getElementById('manualTerms');
+const toasterTitle = document.getElementById('toasterTitle');
+const toasterDescription = document.getElementById('toasterDescription');
+const toasterImage = document.getElementById('toasterImage');
+const toasterImageHint = document.getElementById('toasterImageHint');
+const toasterCta = document.getElementById('toasterCta');
+const overlayTitle = document.getElementById('overlayTitle');
+const overlayDescription = document.getElementById('overlayDescription');
+const overlayImage = document.getElementById('overlayImage');
+const overlayImageHint = document.getElementById('overlayImageHint');
+const overlayCta = document.getElementById('overlayCta');
+const ctaNativeLink = document.getElementById('ctaNativeLink');
+const showManualTerms = document.getElementById('showManualTerms');
+
+// --- NEW Tournament Elements ---
+const tournamentResultArea = document.getElementById('tournamentResultArea');
+const tournamentTitle = document.getElementById('tournamentTitle');
+const tournamentDescription = document.getElementById('tournamentDescription');
+const synopsisImage = document.getElementById('synopsisImage');
+const synopsisImageHint = document.getElementById('synopsisImageHint');
+const synopsisTitle = document.getElementById('synopsisTitle');
+const synopsisDescription = document.getElementById('synopsisDescription');
+const heroImage = document.getElementById('heroImage');
+const heroImageHint = document.getElementById('heroImageHint');
+const mainContent1 = document.getElementById('mainContent1');
+const tournamentTerms = document.getElementById('tournamentTerms');
+const tournamentCondition = document.getElementById('tournamentCondition');
+
+
+function clearResult(){ 
+  mppResultArea.classList.add('d-none'); 
+  inboxResultArea.classList.add('d-none');
+  tournamentResultArea.classList.add('d-none'); // Clear tournament area
+
+  // Clear MPP
+  promoTitle.textContent = ''; 
+  imageHeadline.textContent = '';
+  promoImage.src = ''; 
+  promoImage.style.display = 'none'; 
+  imageHint.textContent = ''; 
+  promoDescription.innerHTML = ''; 
+  promoTerms.innerHTML = '';
+
+  // Clear Inbox
+  inboxTitle.textContent = '';
+  inboxDescription.textContent = '';
+  inboxTerms.innerHTML = '';
+  inboxImageLandscape.src = '';
+  inboxImageLandscape.style.display = 'none';
+  inboxImageLandscapeHint.textContent = '';
+  inboxImageSquare.src = '';
+  inboxImageSquare.style.display = 'none';
+  inboxImageSquareHint.textContent = '';
+  snippetTitle.textContent = '';
+  snippetDescription.textContent = '';
+  shortImage.src = '';
+  shortImage.style.display = 'none';
+  shortImageHint.textContent = '';
+  manualTerms.innerHTML = ''; 
+  toasterTitle.textContent = '';
+  toasterDescription.textContent = '';
+  toasterImage.src = '';
+  toasterImage.style.display = 'none';
+  toasterImageHint.textContent = '';
+  toasterCta.textContent = '';
+  overlayTitle.textContent = '';
+  overlayDescription.textContent = '';
+  overlayImage.src = '';
+  overlayImage.style.display = 'none';
+  overlayImageHint.textContent = '';
+  overlayCta.textContent = '';
+  ctaNativeLink.textContent = '';
+  showManualTerms.textContent = '';
+
+  // Clear Tournament
+  tournamentTitle.textContent = '';
+  tournamentDescription.innerHTML = '';
+  synopsisImage.src = '';
+  synopsisImage.style.display = 'none';
+  synopsisImageHint.textContent = '';
+  synopsisTitle.textContent = '';
+  synopsisDescription.textContent = '';
+  heroImage.src = '';
+  heroImage.style.display = 'none';
+  heroImageHint.textContent = '';
+  mainContent1.innerHTML = '';
+  tournamentTerms.innerHTML = '';
+  tournamentCondition.textContent = '';
+}
+
+function parseJSONSafe(text){
+  try{ return JSON.parse(text); }catch(e){ return null; }
+}
+
+/**
+ * Copies text to the clipboard and provides temporary visual feedback on the button.
+ * Renamed to avoid conflict with checker's copy function.
+ */
+function copyFetchedContent(text, buttonElement) {
+    const tempInput = document.createElement('textarea');
+    tempInput.value = text;
+    tempInput.style.position = 'absolute';
+    tempInput.style.left = '-9999px';
+    document.body.appendChild(tempInput);
+    tempInput.select();
+    
+    let success = false;
+    try {
+        success = document.execCommand('copy');
+    } catch (err) {
+        console.error('Copy failed:', err);
+    }
+    
+    document.body.removeChild(tempInput);
+
+    if (success) {
+        const originalText = buttonElement.textContent;
+        buttonElement.textContent = 'Copied!';
+        buttonElement.classList.add('copied');
+        
+        setTimeout(() => {
+            buttonElement.textContent = originalText;
+            buttonElement.classList.remove('copied');
+            // Restore 'Copy HTML' for HTML buttons
+            if (buttonElement.getAttribute('data-content-type') === 'html') {
+                buttonElement.textContent = 'Copy HTML';
+            }
+        }, 1500);
+    } else {
+        console.warn('Failed to copy. Please manually select and copy the text/HTML.');
+    }
+}
+
+
+// --- DATA PARSING FUNCTIONS ---
+function findJsonValueByCandidates(obj, candidates, visited = new WeakSet()){
+  if (!obj || typeof obj !== 'object' || visited.has(obj)) return null;
+  visited.add(obj);
+
+  for (const c of candidates) {
+    for (const k in obj) {
+      if (!obj.hasOwnProperty(k)) continue;
+      if (k.toLowerCase() === c.toLowerCase()) {
+        const val = obj[k];
+        if (typeof val === 'string' && val.trim()) return val.trim();
+        if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+          if (val.text && typeof val.text === 'string' && val.text.trim()) return val.text.trim();
+          if (val.html && typeof val.html === 'string' && val.html.trim()) return val.html.trim();
+          if (val.value && typeof val.value === 'string' && val.value.trim()) return val.value.trim();
+          const deepMatch = findJsonValueByCandidates(val, candidates, visited);
+          if(deepMatch) return deepMatch;
+        }
+      }
+    }
+  }
+
+  for (const k in obj) {
+    if (!obj.hasOwnProperty(k)) continue;
+    try {
+      const v = obj[k];
+      if (typeof v === 'object' && v !== null) {
+        if (Array.isArray(v)) {
+          for(const item of v) {
+            const arrayItemMatch = findJsonValueByCandidates(item, candidates, visited);
+            if(arrayItemMatch) return arrayItemMatch;
+          }
+        } else {
+          const found = findJsonValueByCandidates(v, candidates, visited);
+          if (found) return found;
+        }
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+function extractXmlContent(element) {
+    // Check nested tags first
+    const nestedValueEl = element.querySelector && (element.querySelector('content') || element.querySelector('value') || element.querySelector('text') || element.querySelector('html') || element.querySelector('url'));
+    if(nestedValueEl && nestedValueEl.textContent.trim()) return nestedValueEl.textContent.trim();
+    
+    // Check attributes
+    for(const attr of ['src','url','href','value']){
+      if(element.getAttribute && element.getAttribute(attr)) return element.getAttribute(attr);
+    }
+    
+    // Check direct text content
+    if(element.textContent && element.textContent.trim()) return element.textContent.trim();
+    return null;
+}
+
+function findXmlValueByNames(doc, candidates){
+  const candidatesLower = candidates.map(c => c.toLowerCase());
+  
+  const walker = doc.createTreeWalker(doc, NodeFilter.SHOW_ELEMENT, null, false);
+  while(walker.nextNode()){
+    const el = walker.currentNode;
+    const localName = (el.localName||el.nodeName||'').toLowerCase();
+    
+    let matchFound = false;
+
+    if (candidatesLower.includes(localName)) {
+        matchFound = true;
+    } 
+    else if (localName === 'field' && el.getAttribute) {
+        const keyAttr = el.getAttribute('key');
+        if (keyAttr && candidatesLower.includes(keyAttr.toLowerCase())) {
+            matchFound = true;
+        }
+    }
+
+    if (matchFound) {
+        const content = extractXmlContent(el);
+        if (content) return content;
+    }
+  }
+  return null;
+}
+
+// --- MAIN FETCH FUNCTION ---
+async function fetchData(){
+  clearResult();
+  let id = idField.value.trim();
+  
+  if(!id){ fetcherErrorDiv.textContent = '⚠️ Please enter a valid ID.'; return; }
+  
+  // --- ID CLEANING LOGIC ---
+  const guidRegex = /(?:%7B|\{)?([0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})(?:%7D|\})?/i;
+  const match = id.match(guidRegex);
+  
+  if (match && match[1]) {
+      id = match[1]; 
+  } else {
+      id = id.replace(/https?:\/\/[^\/]+\/v3\/content\.svc\/cms\/v5\/id\//i, '');
+      id = id.replace(/^\/id\//i, ''); 
+      id = id.split('?')[0].split('#')[0].replace(/\/+$/, '');
+  }
+  
+  if(!id){ fetcherErrorDiv.textContent = '⚠️ The extracted ID is empty. Please check your input.'; return; }
+  
+  idField.value = id; 
+  // --- END ID CLEANING LOGIC ---
+
+  // Switch to the Fetcher Viewer tab
+  new bootstrap.Tab(document.getElementById('main-fetcher-tab')).show();
+  fetcherErrorDiv.textContent = 'Fetching...';
+
+  try{
+    const resp = await fetch(fetcherBaseUrl + id + fetcherQueryParams);
+    const text = await resp.text();
+
+    const json = parseJSONSafe(text);
+    const parser = new DOMParser();
+    const xmlDoc = !json ? parser.parseFromString(text, 'application/xml') : null;
+    
+    if (!json && xmlDoc && xmlDoc.getElementsByTagName('parsererror').length) {
+        throw new Error('Response is neither valid JSON nor valid XML.');
+    }
+    if (!json && !xmlDoc) {
+         throw new Error('Response was empty or unparseable.');
+    }
+
+    let contentType = null;
+    let testFieldMpp, testFieldInbox, testFieldTournament;
+
+    // --- Content Type Detection ---
+    if (json) {
+        testFieldInbox = findJsonValueByCandidates(json, INBOX_COMMON_TITLE_CANDIDATES);
+        testFieldTournament = findJsonValueByCandidates(json, TOURNAMENT_SYNOPSIS_TITLE_CANDIDATES); // Use synopsis title
+        testFieldMpp = findJsonValueByCandidates(json, MPP_TITLE_CANDIDATES);
+    } else {
+        testFieldInbox = findXmlValueByNames(xmlDoc, INBOX_COMMON_TITLE_CANDIDATES);
+        testFieldTournament = findXmlValueByNames(xmlDoc, TOURNAMENT_SYNOPSIS_TITLE_CANDIDATES);
+        testFieldMpp = findXmlValueByNames(xmlDoc, MPP_TITLE_CANDIDATES);
+    }
+
+    // Detection Order: Inbox -> Tournament -> MPP
+    if (testFieldInbox) {
+        contentType = 'inbox';
+    } else if (testFieldTournament) {
+        contentType = 'tournament';
+    } else if (testFieldMpp) {
+        contentType = 'mpp';
+    } else {
+        throw new Error('Could not determine content type. No known key fields found.');
+    }
+
+    // --- Render based on content type ---
+    if (contentType === 'inbox') {
+        new bootstrap.Tab(document.getElementById('inbox-tab')).show();
+        inboxResultArea.classList.remove('d-none');
+        inboxTitle.textContent = testFieldInbox || 'N/A'; // We already have this!
+
+        // --- Start Inbox Parsing ---
+        let commonDesc, commonTerms, commonLandscape, commonSquare, snippetTitleVal, snippetDescVal, shortImageVal, manualTermsVal;
+        let toasterTitleVal, toasterDescVal, toasterImageVal, toasterCtaVal;
+        let overlayTitleVal, overlayDescVal, overlayImageVal, overlayCtaVal;
+        let ctaNativeLinkVal, showManualTermsVal;
+        
+        if(json){
+            commonDesc = findJsonValueByCandidates(json, INBOX_COMMON_DESC_CANDIDATES) || '';
+            commonTerms = findJsonValueByCandidates(json, INBOX_COMMON_TERMS_CANDIDATES) || '';
+            commonLandscape = findJsonValueByCandidates(json, INBOX_COMMON_IMAGE_LANDSCAPE_CANDIDATES) || '';
+            commonSquare = findJsonValueByCandidates(json, INBOX_COMMON_IMAGE_SQUARE_CANDIDATES) || '';
+            snippetTitleVal = findJsonValueByCandidates(json, INBOX_SNIPPET_TITLE_CANDIDATES) || '';
+            snippetDescVal = findJsonValueByCandidates(json, INBOX_SNIPPET_DESC_CANDIDATES) || '';
+            shortImageVal = findJsonValueByCandidates(json, INBOX_SHORT_IMAGE_CANDIDATES) || '';
+            manualTermsVal = findJsonValueByCandidates(json, INBOX_MANUAL_TERMS_CANDIDATES) || ''; 
+            toasterTitleVal = findJsonValueByCandidates(json, INBOX_TOASTER_TITLE_CANDIDATES) || '';
+            toasterDescVal = findJsonValueByCandidates(json, INBOX_TOASTER_DESC_CANDIDATES) || '';
+            toasterImageVal = findJsonValueByCandidates(json, INBOX_TOASTER_IMAGE_CANDIDATES) || '';
+            toasterCtaVal = findJsonValueByCandidates(json, INBOX_TOASTER_CTA_CANDIDATES) || '';
+            overlayTitleVal = findJsonValueByCandidates(json, INBOX_OVERLAY_TITLE_CANDIDATES) || '';
+            overlayDescVal = findJsonValueByCandidates(json, INBOX_OVERLAY_DESC_CANDIDATES) || '';
+            overlayImageVal = findJsonValueByCandidates(json, INBOX_OVERLAY_IMAGE_CANDIDATES) || '';
+            overlayCtaVal = findJsonValueByCandidates(json, INBOX_OVERLAY_CTA_CANDIDATES) || '';
+            ctaNativeLinkVal = findJsonValueByCandidates(json, INBOX_MISC_CTA_LINK_CANDIDATES) || '';
+            showManualTermsVal = findJsonValueByCandidates(json, INBOX_MISC_SHOW_MANUAL_TERMS_CANDIDATES) || '';
+        } else {
+            commonDesc = findXmlValueByNames(xmlDoc, INBOX_COMMON_DESC_CANDIDATES) || '';
+            commonTerms = findXmlValueByNames(xmlDoc, INBOX_COMMON_TERMS_CANDIDATES) || '';
+            commonLandscape = findXmlValueByNames(xmlDoc, INBOX_COMMON_IMAGE_LANDSCAPE_CANDIDATES) || '';
+            commonSquare = findXmlValueByNames(xmlDoc, INBOX_COMMON_IMAGE_SQUARE_CANDIDATES) || '';
+            snippetTitleVal = findXmlValueByNames(xmlDoc, INBOX_SNIPPET_TITLE_CANDIDATES) || '';
+            snippetDescVal = findXmlValueByNames(xmlDoc, INBOX_SNIPPET_DESC_CANDIDATES) || '';
+            shortImageVal = findXmlValueByNames(xmlDoc, INBOX_SHORT_IMAGE_CANDIDATES) || '';
+            manualTermsVal = findXmlValueByNames(xmlDoc, INBOX_MANUAL_TERMS_CANDIDATES) || ''; 
+            toasterTitleVal = findXmlValueByNames(xmlDoc, INBOX_TOASTER_TITLE_CANDIDATES) || '';
+            toasterDescVal = findXmlValueByNames(xmlDoc, INBOX_TOASTER_DESC_CANDIDATES) || '';
+            toasterImageVal = findXmlValueByNames(xmlDoc, INBOX_TOASTER_IMAGE_CANDIDATES) || '';
+            toasterCtaVal = findXmlValueByNames(xmlDoc, INBOX_TOASTER_CTA_CANDIDATES) || '';
+            overlayTitleVal = findXmlValueByNames(xmlDoc, INBOX_OVERLAY_TITLE_CANDIDATES) || '';
+            overlayDescVal = findXmlValueByNames(xmlDoc, INBOX_OVERLAY_DESC_CANDIDATES) || '';
+            overlayImageVal = findXmlValueByNames(xmlDoc, INBOX_OVERLAY_IMAGE_CANDIDATES) || '';
+            overlayCtaVal = findXmlValueByNames(xmlDoc, INBOX_OVERLAY_CTA_CANDIDATES) || '';
+            ctaNativeLinkVal = findXmlValueByNames(xmlDoc, INBOX_MISC_CTA_LINK_CANDIDATES) || '';
+            showManualTermsVal = findXmlValueByNames(xmlDoc, INBOX_MISC_SHOW_MANUAL_TERMS_CANDIDATES) || '';
+        }
+        renderInboxResult(
+            testFieldInbox, // Use the one we already found
+            commonDesc, commonTerms, commonLandscape, commonSquare, 
+            snippetTitleVal, snippetDescVal, shortImageVal, manualTermsVal,
+            toasterTitleVal, toasterDescVal, toasterImageVal, toasterCtaVal,
+            overlayTitleVal, overlayDescVal, overlayImageVal, overlayCtaVal,
+            ctaNativeLinkVal, showManualTermsVal
+        );
+        // --- End Inbox Parsing ---
+
+    } else if (contentType === 'tournament') {
+        new bootstrap.Tab(document.getElementById('tournament-tab')).show();
+        tournamentResultArea.classList.remove('d-none');
+        synopsisTitle.textContent = testFieldTournament || 'N/A'; // Use the key we found
+
+        // --- Start Tournament Parsing ---
+        let title, description, synopsisImg, synopsisDesc, heroImg, content1, terms, condition;
+        
+        if(json) {
+            title = findJsonValueByCandidates(json, TOURNAMENT_TITLE_CANDIDATES) || '';
+            description = findJsonValueByCandidates(json, TOURNAMENT_DESCRIPTION_CANDIDATES) || '';
+            synopsisImg = findJsonValueByCandidates(json, TOURNAMENT_SYNOPSIS_IMAGE_CANDIDATES) || '';
+            synopsisDesc = findJsonValueByCandidates(json, TOURNAMENT_SYNOPSIS_DESCRIPTION_CANDIDATES) || '';
+            heroImg = findJsonValueByCandidates(json, TOURNAMENT_HERO_IMAGE_CANDIDATES) || '';
+            content1 = findJsonValueByCandidates(json, TOURNAMENT_MAIN_CONTENT_1_CANDIDATES) || '';
+            terms = findJsonValueByCandidates(json, TOURNAMENT_TERMS_CANDIDATES) || '';
+            condition = findJsonValueByCandidates(json, TOURNAMENT_CONDITION_CANDIDATES) || '';
+        } else {
+            title = findXmlValueByNames(xmlDoc, TOURNAMENT_TITLE_CANDIDATES) || '';
+            description = findXmlValueByNames(xmlDoc, TOURNAMENT_DESCRIPTION_CANDIDATES) || '';
+            synopsisImg = findXmlValueByNames(xmlDoc, TOURNAMENT_SYNOPSIS_IMAGE_CANDIDATES) || '';
+            synopsisDesc = findXmlValueByNames(xmlDoc, TOURNAMENT_SYNOPSIS_DESCRIPTION_CANDIDATES) || '';
+            heroImg = findXmlValueByNames(xmlDoc, TOURNAMENT_HERO_IMAGE_CANDIDATES) || '';
+            content1 = findXmlValueByNames(xmlDoc, TOURNAMENT_MAIN_CONTENT_1_CANDIDATES) || '';
+            terms = findXmlValueByNames(xmlDoc, TOURNAMENT_TERMS_CANDIDATES) || '';
+            condition = findXmlValueByNames(xmlDoc, TOURNAMENT_CONDITION_CANDIDATES) || '';
+        }
+
+        renderTournamentResult(
+            title, description, synopsisImg, 
+            testFieldTournament, // Use the key we found
+            synopsisDesc, heroImg, content1, terms, condition
+        );
+        // --- End Tournament Parsing ---
+
+    } else if (contentType === 'mpp') {
+        new bootstrap.Tab(document.getElementById('mpp-tab')).show();
+        mppResultArea.classList.remove('d-none');
+        promoTitle.textContent = testFieldMpp || 'N/A'; // Use the one we found
+
+        // --- Start MPP Parsing ---
+        let headline, image, detailed, terms;
+        if(json){
+          headline = findJsonValueByCandidates(json, MPP_IMAGE_HEADLINE_CANDIDATES) || '';
+          image = findJsonValueByCandidates(json, MPP_IMAGE_CANDIDATES) || '';
+          detailed = findJsonValueByCandidates(json, MPP_DETAILED_CANDIDATES) || '';
+          terms = findJsonValueByCandidates(json, MPP_TERMS_CANDIDATES) || ''; 
+        } else {
+          headline = findXmlValueByNames(xmlDoc, MPP_IMAGE_HEADLINE_CANDIDATES) || '';
+          image = findXmlValueByNames(xmlDoc, MPP_IMAGE_CANDIDATES);
+          detailed = findXmlValueByNames(xmlDoc, MPP_DETAILED_CANDIDATES) || '';
+          terms = findXmlValueByNames(xmlDoc, MPP_TERMS_CANDIDATES) || '';
+        }
+        renderMppResult(
+            testFieldMpp, // Use the one we found
+            headline, image, detailed, terms
+        );
+        // --- End MPP Parsing ---
+    }
+    
+    fetcherErrorDiv.textContent = ''; // Clear 'Fetching...' message
+
+  }catch(err){
+    clearResult();
+    fetcherErrorDiv.textContent = '❌ ' + (err.message || 'Fetch failed. Try another ID.');
+    console.error(err);
+  }
+}
+
+// --- RENDER FUNCTIONS ---
+function renderMppResult(title, headline, image, detailed, terms){
+  promoTitle.textContent = title || 'N/A';
+  imageHeadline.textContent = headline || 'N/A';
+  
+  if(image){
+    promoImage.src = image;
+    promoImage.style.display = 'block';
+    
+    promoImage.onerror = () => {
+        promoImage.style.display = 'none'; 
+        imageHint.innerHTML = image;
+    };
+    
+    imageHint.innerHTML = '<a href="' + image + '" target="_blank" class="small-muted">' + image + '</a>';
+  } else {
+    promoImage.style.display = 'none';
+    imageHint.textContent = 'No image found.';
+  }
+  
+  promoDescription.innerHTML = detailed || '<em>No detailed description provided.</em>';
+  promoTerms.innerHTML = terms || '<em>No terms and conditions provided.</em>';
+  fetcherErrorDiv.textContent = '';
+  mppResultArea.classList.remove('d-none');
+}
+
+function renderInboxResult(
+    commonTitle, commonDesc, commonTerms, commonLandscape, commonSquare, 
+    snippetTitleVal, snippetDescVal, shortImageVal, manualTermsVal, 
+    toasterTitleVal, toasterDescVal, toasterImageVal, toasterCtaVal,
+    overlayTitleVal, overlayDescVal, overlayImageVal, overlayCtaVal,
+    ctaNativeLinkVal, showManualTermsVal
+) {
+    // Common Data
+    inboxTitle.textContent = commonTitle || 'N/A';
+    inboxDescription.textContent = commonDesc || 'N/A';
+    inboxTerms.innerHTML = commonTerms || '<em>No common terms provided.</em>';
+
+    // Landscape Image
+    if (commonLandscape) {
+        inboxImageLandscape.src = commonLandscape;
+        inboxImageLandscape.style.display = 'block';
+        inboxImageLandscape.onerror = () => {
+            inboxImageLandscape.style.display = 'none'; 
+            inboxImageLandscapeHint.innerHTML = commonLandscape;
+        };
+        inboxImageLandscapeHint.innerHTML = '<a href="' + commonLandscape + '" target="_blank" class="small-muted">' + commonLandscape + '</a>';
+    } else {
+        inboxImageLandscape.style.display = 'none';
+        inboxImageLandscapeHint.textContent = 'No landscape image found.';
+    }
+
+    // Square Image
+    if (commonSquare) {
+        inboxImageSquare.src = commonSquare;
+        inboxImageSquare.style.display = 'block';
+        inboxImageSquare.onerror = () => {
+            inboxImageSquare.style.display = 'none';
+            inboxImageSquareHint.innerHTML = commonSquare;
+        };
+        inboxImageSquareHint.innerHTML = '<a href="' + commonSquare + '" target="_blank" class="small-muted">' + commonSquare + '</a>';
+    } else {
+        inboxImageSquare.style.display = 'none';
+        inboxImageSquareHint.textContent = 'No square image found.';
+    }
+
+    // Snippet Data
+    snippetTitle.textContent = snippetTitleVal || 'N/A';
+    snippetDescription.textContent = snippetDescVal || 'N/A';
+    manualTerms.innerHTML = manualTermsVal || '<em>No manual terms provided.</em>';
+
+    // Short Image
+    if (shortImageVal) {
+        shortImage.src = shortImageVal;
+        shortImage.style.display = 'block';
+        shortImage.onerror = () => {
+            shortImage.style.display = 'none'; 
+            shortImageHint.innerHTML = shortImageVal;
+        };
+        shortImageHint.innerHTML = '<a href="' + shortImageVal + '" target="_blank" class="small-muted">' + shortImageVal + '</a>';
+    } else {
+        shortImage.style.display = 'none';
+        shortImageHint.textContent = 'No short image found.';
+    }
+    
+    // TOASTER DATA
+    toasterTitle.textContent = toasterTitleVal || 'N/A';
+    toasterDescription.textContent = toasterDescVal || 'N/A';
+    toasterCta.textContent = toasterCtaVal || 'N/A';
+    
+    // Toaster Image
+    if (toasterImageVal) {
+        toasterImage.src = toasterImageVal;
+        toasterImage.style.display = 'block';
+        toasterImage.onerror = () => {
+            toasterImage.style.display = 'none'; 
+            toasterImageHint.innerHTML = toasterImageVal;
+        };
+        toasterImageHint.innerHTML = '<a href="' + toasterImageVal + '" target="_blank" class="small-muted">' + toasterImageVal + '</a>';
+    } else {
+        toasterImage.style.display = 'none';
+        toasterImageHint.textContent = 'No toaster image found.';
+    }
+
+    // OVERLAY DATA
+    overlayTitle.textContent = overlayTitleVal || 'N/A';
+    overlayDescription.textContent = overlayDescVal || 'N/A';
+    overlayCta.textContent = overlayCtaVal || 'N/A';
+    
+    // Overlay Image
+    if (overlayImageVal) {
+        overlayImage.src = overlayImageVal;
+        overlayImage.style.display = 'block';
+        overlayImage.onerror = () => {
+            overlayImage.style.display = 'none'; 
+            overlayImageHint.innerHTML = overlayImageVal;
+        };
+        overlayImageHint.innerHTML = '<a href="' + overlayImageVal + '" target="_blank" class="small-muted">' + overlayImageVal + '</a>';
+    } else {
+        overlayImage.style.display = 'none';
+        overlayImageHint.textContent = 'No overlay image found.';
+    }
+
+    // MISCELLANEOUS DATA
+    ctaNativeLink.textContent = ctaNativeLinkVal || 'N/A';
+    showManualTerms.textContent = showManualTermsVal || 'N/A';
+
+    fetcherErrorDiv.textContent = '';
+    inboxResultArea.classList.remove('d-none');
+}
+
+// --- NEW Tournament Render Function ---
+function renderTournamentResult(
+    title, description, synopsisImg, 
+    synopsisTitleVal, synopsisDesc, 
+    heroImg, content1, terms, condition
+) {
+    tournamentTitle.textContent = title || 'N/A';
+    tournamentDescription.innerHTML = description || '<em>No description provided.</em>';
+    synopsisTitle.textContent = synopsisTitleVal || 'N/A';
+    synopsisDescription.textContent = synopsisDesc || 'N/A';
+    mainContent1.innerHTML = content1 || '<em>No main content provided.</em>';
+    tournamentTerms.innerHTML = terms || '<em>No terms provided.</em>';
+    tournamentCondition.textContent = condition || 'N/A';
+
+    // Synopsis Image
+    if (synopsisImg) {
+        synopsisImage.src = synopsisImg;
+        synopsisImage.style.display = 'block';
+        synopsisImage.onerror = () => {
+            synopsisImage.style.display = 'none'; 
+            synopsisImageHint.innerHTML = synopsisImg;
+        };
+        synopsisImageHint.innerHTML = '<a href="' + synopsisImg + '" target="_blank" class="small-muted">' + synopsisImg + '</a>';
+    } else {
+        synopsisImage.style.display = 'none';
+        synopsisImageHint.textContent = 'No synopsis image found.';
+    }
+
+    // Hero Image
+    if (heroImg) {
+        heroImage.src = heroImg;
+        heroImage.style.display = 'block';
+        heroImage.onerror = () => {
+            heroImage.style.display = 'none'; 
+            heroImageHint.innerHTML = heroImg;
+        };
+        heroImageHint.innerHTML = '<a href="' + heroImg + '" target="_blank" class="small-muted">' + heroImg + '</a>';
+    } else {
+        heroImage.style.display = 'none';
+        heroImageHint.textContent = 'No hero image found.';
+    }
+
+    fetcherErrorDiv.textContent = '';
+    tournamentResultArea.classList.remove('d-none');
+}
+
+
+// --- EVENT LISTENERS ---
+fetchBtn.addEventListener('click', fetchData);
+idField.addEventListener('keypress', (e)=>{ if(e.key==='Enter') fetchData(); });
+
+// --- END: CONTENT FETCHER SCRIPT ---
+
+
+// --- START: FORMAT CHECKER SCRIPT ---
+
+  // --- DOM Elements ---
+  const outputDiv = document.getElementById('output');
+  const customOutputDiv = document.getElementById('customOutput');
+  const previewDiv = document.getElementById('preview');
+  const darkModeToggleBtn = document.getElementById('darkModeToggle');
+  const renderBtn = document.getElementById('renderBtn');
+  const compareBtn = document.getElementById('compareBtn');
+  const copyToClipboardBtn = document.getElementById('copyToClipboardBtn');
+  const builtInFiltersContainer = document.getElementById('builtInFiltersContainer');
+  const customRulesContainer = document.getElementById('customRulesContainer');
+  const addCustomRuleBtn = document.getElementById('addCustomRuleBtn');
+  const customRuleNameInput = document.getElementById('customRuleName');
+  const customRuleTextInput = document.getElementById('customRuleText');
+  const clearMainBtn = document.getElementById('clearMainBtn');
+  const clearCompareBtn = document.getElementById('clearCompareBtn');
+
+  // --- State Variables ---
+  let customRules = [];
+  const filters = {};
+  let editingRuleId = null;
+  let lastHighlights = [];
+
+  // --- Configuration ---
+  const BUILT_IN_RULES = {
+      emptyTags: 'Empty HTML Tags',
+      nbspErrors: '&nbsp; / &#160; Entities Found',
+      supFormatIssues: 'Invalid `<sup>` Tag Content',
+      missingOrdinalSup: 'Ordinal Numbers Missing `<sup>`',
+      malformedTags: 'Malformed Tags',
+      extraSpacesInTags: 'Extra Spaces in Tag Declarations',
+      invalidHexColors: 'Invalid Hex Colors',
+      dollarSignSpacing: 'Dollar Sign Spacing',
+      multipleDollarSigns: 'Multiple Dollar Signs',
+      slashedPriceSequence: 'Slashed Price Sequence',
+      ampmFormatIssues: 'AM/PM Formatting'
+  };
+
+  const FIX_SUGGESTIONS = {
+    emptyTags: 'Suggestion: Remove the tag or add content to it.',
+    nbspErrors: 'Suggestion: Replace with a standard space or use CSS for spacing.',
+    supFormatIssues: 'Suggestion: Ensure <sup> tags contain valid alphanumeric characters.',
+    missingOrdinalSup: 'Suggestion: Wrap ordinal indicators (st, nd, rd, th) in <sup> tags.',
+    malformedTags: 'Suggestion: Check for unclosed or mismatched HTML tags.',
+    extraSpacesInTags: 'Suggestion: Remove extra spaces within the tag declaration.',
+    invalidHexColors: 'Suggestion: Use an approved 6-digit hex color code.',
+    dollarSignSpacing: 'Suggestion: Remove the space between the dollar sign and the number (e.g., $500).',
+    multipleDollarSigns: 'Suggestion: Use only a single dollar sign for prices.',
+    slashedPriceSequence: 'Suggestion: This format (e.g., 20/30/40) is often problematic. Verify if it should be formatted differently (e.g., as a list or with "or").',
+    ampmFormatIssues: 'Suggestion: Format time with a space and uppercase AM/PM (e.g., 7:00 PM).'
+  };
+
+  // --- Initialization ---
+  const editor = CodeMirror.fromTextArea(document.getElementById('htmlInput'), { mode: 'text/html', lineNumbers: true, autoCloseTags: true, theme: 'default', lineWrapping: true });
+  const compareEditor = CodeMirror.fromTextArea(document.getElementById('compareInput'), { mode: 'text/html', lineNumbers: true, autoCloseTags: true, theme: 'default', lineWrapping: true });
+
+  // --- Web Worker Setup ---
+  const workerBlob = new Blob([document.getElementById('checker-worker').textContent], { type: 'application/javascript' });
+  const worker = new Worker(URL.createObjectURL(workerBlob));
+
+
+  function initializeFilters() {
+      Object.entries(BUILT_IN_RULES).forEach(([key, label]) => {
+          const id = `filter${key}`;
+          const checkboxHtml = `
+              <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="checkbox" checked id="${id}">
+                  <label class="form-check-label" for="${id}">${label}</label>
+              </div>`;
+          builtInFiltersContainer.insertAdjacentHTML('beforeend', checkboxHtml);
+          filters[key] = document.getElementById(id);
+          filters[key].addEventListener('change', debouncedCheckHTML);
+      });
+  }
+
+  // --- Helper Functions ---
+  function debounce(func, delay) {
+      let timeoutId;
+      return function(...args) {
+          clearTimeout(timeoutId);
+          timeoutId = setTimeout(() => {
+              func.apply(this, args);
+          }, delay);
+      };
+  }
+  function escapeRegex(string) {
+      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  function escapeHtml(text) { const d = document.createElement('div'); d.appendChild(document.createTextNode(text)); return d.innerHTML; }
+  function toggleDarkMode() { const h = document.documentElement; const i = h.getAttribute("data-bs-theme") === "dark"; const n = i ? "light" : "dark"; h.setAttribute("data-bs-theme", n); editor.setOption("theme", n === "dark" ? "darcula" : "default"); compareEditor.setOption("theme", n === "dark" ? "darcula" : "default"); }
+
+  // --- Core Functions ---
+  function checkHTML() {
+    const activeFilters = {};
+    for (const key in filters) {
+        activeFilters[key] = filters[key].checked;
+    }
+    const activeCustomRules = customRules.map(rule => ({
+        name: rule.name,
+        text: escapeRegex(rule.text), // Escape the user's text into a valid regex pattern here
+        checked: rule.checkbox.checked
+    }));
+
+    worker.postMessage({
+        input: editor.getValue(),
+        customRules: activeCustomRules,
+        filters: activeFilters
+    });
+  }
+  const debouncedCheckHTML = debounce(checkHTML, 400);
+
+  function updateUI(errors, highlights) {
+      lastHighlights = highlights; // Store for the render preview
+      const input = editor.getValue();
+      let finalHtml = "";
+      let lastIndex = 0;
+      
+      highlights.sort((a, b) => a.start - b.start);
+
+      const filteredHighlights = [];
+      if (highlights.length > 0) {
+          let current = highlights[0];
+          for (let i = 1; i < highlights.length; i++) {
+              const next = highlights[i];
+              if (next.start < current.end) {
+                  // Overlapping, merge or pick dominant
+                  if (next.end > current.end) {
+                      current.end = next.end; // Merge intervals
+                      // Combine classes if different, e.g., 'error-highlight warning-highlight'
+                      if (!current.class.includes(next.class)) {
+                        current.class += ' ' + next.class;
+                      }
+                  }
+                  // if next is fully contained, skip it
+              } else {
+                  // No overlap, push current and move to next
+                  filteredHighlights.push(current);
+                  current = next;
+              }
+          }
+          filteredHighlights.push(current);
+      }
+
+
+      const errorCategories = { ...BUILT_IN_RULES, ...Object.fromEntries(customRules.map(r => [r.name, r.name])) };
+
+      filteredHighlights.forEach(h => {
+          const original = input.substring(h.start, h.end);
+          const title = errorCategories[h.key] || h.key;
+          const suggestion = FIX_SUGGESTIONS[h.key] || '';
+          const tooltipContent = `<strong>${escapeHtml(title)}</strong><br>${escapeHtml(suggestion)}`;
+
+          finalHtml += escapeHtml(input.substring(lastIndex, h.start));
+          finalHtml += `<span class="highlight ${h.class}" id="highlight-${h.start}" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="top" title="${tooltipContent}">${escapeHtml(original)}</span>`;
+          lastIndex = h.end;
+      });
+      finalHtml += escapeHtml(input.substring(lastIndex));
+      previewDiv.innerHTML = finalHtml;
+
+      // Initialize tooltips
+      const tooltipTriggerList = [].slice.call(previewDiv.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+      });
+
+      // --- Reporting Logic ---
+      const customRuleNames = new Set(customRules.map(r => r.name));
+      let builtInErrorsCount = 0;
+      let customMatchesCount = 0;
+      let builtInReportHtml = '';
+      let customReportHtml = '';
+      
+      for (const [key, list] of Object.entries(errors)) {
+          if (list.length > 0) {
+              let isCustom = customRuleNames.has(key);
+              // let isWarning = ['deprecatedTags', 'missingAltText', 'inlineStyles'].includes(key); // REMOVED
+
+              if (isCustom) {
+                  customMatchesCount += list.length;
+              } else { // Only count "errors", not "warnings"
+                  builtInErrorsCount += list.length;
+              }
+
+              let reportChunk = `<p class="mb-1"><strong>${errorCategories[key]} (${list.length}):</strong></p>`;
+              reportChunk += '<ul class="list-unstyled mb-3">';
+              list.forEach((item) => {
+                  let errorDetail = '';
+                  if (key === 'malformedTags') {
+                      errorDetail = `Line ${item.line}: ${item.type} tag: ${escapeHtml(item.tag)}`;
+                  } else if (['extraSpacesInTags'].includes(key)) { // REMOVED deprecatedTags, missingAltText, inlineStyles
+                      errorDetail = `Line ${item.line}: ${escapeHtml(item.tag)}`;
+                  }
+                  else if (['nbspErrors', 'missingOrdinalSup', 'invalidHexColors', 'dollarSignSpacing', 'ampmFormatIssues', 'multipleDollarSigns', 'slashedPriceSequence'].includes(key)) {
+                      errorDetail = `Line ${item.line}: "${escapeHtml(item.text || item.entity || item.color)}" (Context: "${escapeHtml(item.context)}")`;
+                  } else {
+                      errorDetail = `Line ${item.line}: ${escapeHtml(item.html || item.text || '')}`;
+                  }
+                  
+                  reportChunk += `<li><a href="#highlight-${item.start}" class="report-link"><small>${errorDetail}</small></a></li>`;
+              });
+              reportChunk += '</ul>';
+
+              if (isCustom) {
+                  customReportHtml += reportChunk;
+              } else {
+                  builtInReportHtml += reportChunk;
+              }
+          }
+      }
+      
+      // Update main error output
+      let totalIssues = builtInErrorsCount; // REMOVED other counts
+      
+      if (totalIssues > 0) {
+          let summary = ``;
+          if (builtInErrorsCount > 0) {
+            summary += `Total Errors Found: ${builtInErrorsCount}<br>`;
+          }
+          // REMOVED summary lines for deprecatedTags, missingAltText, inlineStyles
+
+          outputDiv.className = 'alert alert-danger'; // No longer need 'alert-warning' logic
+          outputDiv.innerHTML = `<strong class="text-danger">Format Check Summary:</strong><br>${summary}<br>${builtInReportHtml}`;
+      } else if (editor.getValue().trim() === '' && customMatchesCount === 0) {
+          outputDiv.className = 'alert alert-info';
+          outputDiv.innerHTML = 'Paste HTML into the main editor to start checking for issues.';
+      } else {
+          outputDiv.className = 'alert alert-success';
+          outputDiv.innerHTML = '<strong class="text-success">No formatting issues found! 🎉 Your HTML looks good.</strong>';
+      }
+
+      // Update custom rule output
+      if (customMatchesCount > 0) {
+          customOutputDiv.className = 'alert alert-info mt-3';
+          customOutputDiv.innerHTML = `<strong class="text-info">Custom Rules Found:</strong><br>Total Matches: ${customMatchesCount}<br><br>${customReportHtml}`;
+      } else {
+          customOutputDiv.innerHTML = '';
+          customOutputDiv.className = '';
+      }
+  }
+
+  worker.onmessage = (e) => {
+      updateUI(e.data.errors, e.data.highlights);
+  };
+
+  function showComparison() {
+    const originalText = editor.getValue();
+    const comparisonText = compareEditor.getValue();
+    
+    const diffTitles = document.getElementById('diffTitles');
+    const diffContainer = document.getElementById('diffContainer');
+    const noChangesMessage = document.getElementById('noChangesMessage');
+    const diffInline = document.getElementById('diffInline');
+
+    const renderDiff = (mode) => {
+        if (originalText === comparisonText) {
+            diffTitles.classList.add('d-none');
+            diffContainer.classList.add('d-none');
+            diffInline.style.display = 'none';
+            noChangesMessage.classList.remove('d-none');
+            return;
+        }
+        
+        diffTitles.classList.remove('d-none');
+        noChangesMessage.classList.add('d-none');
+
+        if (mode === 'inline') {
+            diffContainer.classList.add('d-none');
+            diffInline.style.display = 'block';
+
+            const diff = Diff.diffWords(originalText, comparisonText);
+            let html = '';
+            diff.forEach(part => {
+                const val = escapeHtml(part.value);
+                if (part.added) {
+                    html += `<span class="diff-inline-added">${val}</span>`;
+                } else if (part.removed) {
+                    html += `<span class="diff-inline-removed">${val}</span>`;
+                } else {
+                    html += val;
+                }
+            });
+            diffInline.innerHTML = html;
+
+        } else { // Side-by-side
+            diffContainer.classList.remove('d-none');
+            diffInline.style.display = 'none';
+            const diff = Diff.diffLines(originalText, comparisonText, { newlineIsToken: true });
+            let beforeHtml = '', afterHtml = '';
+
+            diff.forEach(part => {
+              const val = escapeHtml(part.value);
+              if (part.added) { afterHtml += `<span class="diff-added">${val}</span>`; }
+              else if (part.removed) { beforeHtml += `<span class="diff-removed">${val}</span>`; }
+              else { beforeHtml += val; afterHtml += val; }
+            });
+
+            document.getElementById('diffBefore').innerHTML = beforeHtml;
+            document.getElementById('diffAfter').innerHTML = afterHtml;
+        }
+    }
+    
+    document.querySelectorAll('input[name="diff-view"]').forEach(radio => {
+        radio.onchange = () => renderDiff(radio.id.startsWith('inline') ? 'inline' : 'side-by-side');
+    });
+
+    renderDiff('side-by-side'); // Initial render
+    new bootstrap.Modal(document.getElementById('compareModal')).show();
+  }
+  
+  function showRenderedPreview() {
+      const modalBody = document.getElementById('renderModalBody');
+      modalBody.innerHTML = editor.getValue();
+      new bootstrap.Modal(document.getElementById('renderModal')).show();
+  }
+
+  function saveCustomRules() {
+      const rulesToSave = customRules.map(rule => ({ name: rule.name, text: rule.text }));
+      localStorage.setItem('customFormatCheckerRules', JSON.stringify(rulesToSave));
+  }
+
+  function loadCustomRules() {
+      const savedRules = localStorage.getItem('customFormatCheckerRules');
+      if (savedRules) {
+          try {
+              const parsedRules = JSON.parse(savedRules);
+              if (Array.isArray(parsedRules)) {
+                  parsedRules.forEach(rule => {
+                      if (rule.name && rule.text) {
+                          renderCustomRule(rule.name, rule.text, true);
+                      }
+                  });
+              }
+          } catch (e) {
+              console.error("Could not load custom rules from localStorage:", e);
+              localStorage.removeItem('customFormatCheckerRules'); // Clear corrupted data
+          }
+      }
+  }
+
+  function handleAddOrUpdateRule() {
+      if (editingRuleId) {
+          updateCustomRule();
+      } else {
+          addCustomRule();
+      }
+  }
+
+  function addCustomRule() {
+      const name = customRuleNameInput.value.trim();
+      const text = customRuleTextInput.value.trim();
+      if (!name || !text) { 
+          // Replaced alert with a console warning, as alerts are disallowed.
+          console.warn("Please provide both a name and text to find for the custom rule."); 
+          return; 
+      }
+      renderCustomRule(name, text);
+      customRuleNameInput.value = '';
+      customRuleTextInput.value = '';
+      saveCustomRules();
+      debouncedCheckHTML();
+  }
+  
+  function renderCustomRule(name, text, isLoading = false) {
+      const ruleId = `customFilter_${Date.now()}_${Math.random()}`; // More robust ID
+      const ruleHtml = `
+          <div class="form-check form-check-inline" id="container_${ruleId}">
+              <input class="form-check-input" type="checkbox" checked id="${ruleId}">
+              <label class="form-check-label" for="${ruleId}">${escapeHtml(name)}</label>
+              <button class="btn btn-sm btn-secondary ms-1 py-0 px-1" data-rule-id="${ruleId}" data-action="edit">Edit</button>
+              <button class="btn btn-sm btn-danger ms-1 py-0 px-1" data-rule-id="${ruleId}" data-action="remove">&times;</button>
+          </div>`;
+      customRulesContainer.insertAdjacentHTML('beforeend', ruleHtml);
+      
+      const checkbox = document.getElementById(ruleId);
+      const rule = { name, text, id: ruleId, checkbox };
+      customRules.push(rule);
+      
+      checkbox.addEventListener('change', debouncedCheckHTML);
+      document.querySelector(`button[data-rule-id="${ruleId}"][data-action="edit"]`).addEventListener('click', () => editCustomRule(ruleId));
+      document.querySelector(`button[data-rule-id="${ruleId}"][data-action="remove"]`).addEventListener('click', () => removeCustomRule(ruleId));
+  }
+
+  function editCustomRule(ruleId) {
+      const ruleToEdit = customRules.find(r => r.id === ruleId);
+      if (!ruleToEdit) return;
+
+      customRuleNameInput.value = ruleToEdit.name;
+      customRuleTextInput.value = ruleToEdit.text;
+      
+      editingRuleId = ruleId;
+      addCustomRuleBtn.textContent = 'Update Rule';
+      addCustomRuleBtn.classList.remove('btn-primary');
+      addCustomRuleBtn.classList.add('btn-success');
+  }
+
+  function updateCustomRule() {
+      const ruleToUpdate = customRules.find(r => r.id === editingRuleId);
+      if (!ruleToUpdate) return;
+
+      const newName = customRuleNameInput.value.trim();
+      const newText = customRuleTextInput.value.trim();
+
+      if (!newName || !newText) {
+          console.warn("Rule name and text cannot be empty.");
+          return;
+      }
+
+      ruleToUpdate.name = newName;
+      ruleToUpdate.text = newText;
+
+      // Update the label in the UI
+      const label = document.querySelector(`label[for="${editingRuleId}"]`);
+      label.textContent = newName;
+
+      // Reset form
+      customRuleNameInput.value = '';
+      customRuleTextInput.value = '';
+      addCustomRuleBtn.textContent = 'Add Rule';
+      addCustomRuleBtn.classList.remove('btn-success');
+      addCustomRuleBtn.classList.add('btn-primary');
+      editingRuleId = null;
+
+      saveCustomRules();
+      debouncedCheckHTML();
+  }
+
+  function removeCustomRule(ruleId) {
+      document.getElementById(`container_${ruleId}`).remove();
+      customRules = customRules.filter(rule => rule.id !== ruleId);
+      saveCustomRules();
+      debouncedCheckHTML();
+  }
+
+  function copyEditorToClipboard() {
+    navigator.clipboard.writeText(editor.getValue()).then(() => {
+      const originalText = copyToClipboardBtn.textContent;
+      copyToClipboardBtn.textContent = 'Copied!';
+      setTimeout(() => { copyToClipboardBtn.textContent = 'Copy Main Text'; }, 2000);
+    }).catch(err => console.error('Failed to copy: ', err));
+  }
+
+  // --- Event Listeners ---
+  darkModeToggleBtn.addEventListener('click', toggleDarkMode);
+  renderBtn.addEventListener('click', showRenderedPreview);
+  compareBtn.addEventListener('click', showComparison);
+  copyToClipboardBtn.addEventListener('click', copyEditorToClipboard);
+  addCustomRuleBtn.addEventListener('click', handleAddOrUpdateRule);
+  editor.on('change', debouncedCheckHTML);
+  clearMainBtn.addEventListener('click', () => editor.setValue(''));
+  clearCompareBtn.addEventListener('click', () => compareEditor.setValue(''));
+  
+  document.getElementById('report-pane-container').addEventListener('click', (e) => {
+      if (e.target.closest('.report-link')) {
+          e.preventDefault();
+          const targetId = e.target.closest('.report-link').getAttribute('href').substring(1);
+          const targetElement = document.getElementById(targetId);
+          if (targetElement) {
+              targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+      }
+  });
+
+  // --- Global Click Listener for Fetcher Buttons ---
+  document.addEventListener('click', (e) => {
+      // Handle "Copy" buttons in fetcher
+      if (e.target.classList.contains('copy-btn')) {
+          const targetId = e.target.getAttribute('data-target');
+          const contentType = e.target.getAttribute('data-content-type');
+          const targetElement = document.getElementById(targetId);
+          let content;
+
+          if (!targetElement) return;
+
+          if (contentType === 'html') {
+              content = targetElement.innerHTML;
+          } else {
+              content = targetElement.textContent;
+          }
+
+          if (content && content.trim()) {
+              copyFetchedContent(content, e.target);
+          } else {
+              e.target.textContent = 'Empty';
+              setTimeout(() => {
+                  e.target.textContent = (contentType === 'html' ? 'Copy HTML' : 'Copy');
+              }, 1000);
+          }
+      }
+      
+      // Handle "Send to Checker" buttons
+      if (e.target.classList.contains('send-to-checker-btn')) {
+          const targetId = e.target.getAttribute('data-target');
+          const targetElement = document.getElementById(targetId);
+          if (targetElement) {
+              const htmlContent = targetElement.innerHTML;
+              editor.setValue(htmlContent);
+              
+              // Switch to the checker tab
+              new bootstrap.Tab(document.getElementById('main-checker-tab')).show();
+
+              // Scroll to the top of the editor
+              editor.scrollTo(0, 0);
+              // Run check after a short delay
+              setTimeout(debouncedCheckHTML, 50);
+          }
+      }
+
+      // Handle "Send to Compare" buttons
+      if (e.target.classList.contains('send-to-compare-btn')) {
+          const targetId = e.target.getAttribute('data-target');
+          const targetElement = document.getElementById(targetId);
+          if (targetElement) {
+              const htmlContent = targetElement.innerHTML;
+              compareEditor.setValue(htmlContent);
+              
+              // Switch to the checker tab
+              new bootstrap.Tab(document.getElementById('main-checker-tab')).show();
+
+              // Scroll to the top of the compare editor
+              compareEditor.scrollTo(0, 0);
+          }
+      }
+  });
+
+
+  // --- Initial Load ---
+  initializeFilters();
+  loadCustomRules();
+  editor.setValue(`<p>This is a paragraph.</p>
+<div style="background-color: #D4B962;">Valid BetMGM Casino color.</div>
+<span style="color: #00A35B;">Valid BetMGM Poker color.</span>
+<h1 style="color: #d21c5d;">Valid Borgata Casino color.</h1>
+<p style="border: 1px solid #F47523;">Valid Borgata Poker color.</p>
+<div style="background: #5ac8e8;">Valid Borgata Sports color.</div>
+<a href="#" style="color: #F00A47;">Valid PartyCasino/partypoker color.</a>
+<p style="background-color: #EFE700;">Valid WheelOfFortune color.</p>
+<p style="color: #474747;">Valid Shared PAT color.</p>
+
+<div style="color: #FF0000;">Invalid Red color.</div>
+<p style="background: #abcde1;">Invalid custom color.</p>
+<span style="font-size: 16px; color: #123456;">Another invalid color.</span>
+<div  id="test">
+    <p>This paragraph has extra spaces in its parent div tag.</p>
+</div>
+<br>
+<div>    </div>
+<span>&nbsp;</span>
+<p>&nbsp; Another &nbsp; issue here.</p>
+<p>The 1st and 2nd items are here.</p>
+<p>The 3<sup>rd</sup> item is correctly formatted.</p>
+<p>A sup with <sup class="test"> </sup> empty content</p>
+<p>Another sup with <sup>@#$%</sup> special chars</p>
+<div></div>
+<section>  </section>
+<a href="#"></a>
+<p><span>Missing closing span for this line.</p>
+<p>Unclosed paragraph.
+<div class="container">
+    <p>Some content.</p>
+    The final cost is $ 500.
+    This should be correct: $123.45.
+    We also offer $ 75 discount.
+    Meeting at 3:00PM for a quick review.
+    Deadline is 9:00am sharp.
+    Lunch is at 12:30pm.
+    The event starts at 7:00 PM tonight.
+    We need to meet by 08:00 AM.
+    This is wrong: $$40.
+    This is a test: $20/30/40/50.
+    And another one: 10/20/30.
+</div>`);
+  compareEditor.setValue(``);
+  debouncedCheckHTML();
+</script>
+
+</body>
+</html>
