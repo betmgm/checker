@@ -158,7 +158,7 @@
         border-color: #28a745;
         color: white;
     }
-    #imageHeadline, #snippetTitle {
+    #imageHeadline, #snippetTitle, #creativeTitle {
         font-weight: 500;
         font-size: 1rem;
     }
@@ -207,7 +207,7 @@
       <div class="col-md-3 d-grid"><button id="fetchBtn" class="btn btn-primary">Fetch Data</button></div>
     </div>
     <div id="fetcherError" class="text-danger mt-3"></div>
-    <div class="small-muted mt-2">Fetches content data, auto-detects type (MPP, Inbox, or Tournament), and displays key fields.</div>
+    <div class="small-muted mt-2">Fetches content data, auto-detects type (MPP, Inbox, Tournament, or Creative), and displays key fields.</div>
   </div>
 
   <!-- MAIN TAB NAVIGATION -->
@@ -313,7 +313,7 @@
     <!-- ================================== -->
     <div class="tab-pane fade" id="fetcher-pane" role="tabpanel" aria-labelledby="main-fetcher-tab" tabindex="1">
         
-        <!-- SUB-TAB NAVIGATION (MPP/Inbox/Tournament) -->
+        <!-- SUB-TAB NAVIGATION (MPP/Inbox/Tournament/Creative) -->
         <ul class="nav nav-tabs" id="contentTabs" role="tablist">
             <li class="nav-item" role="presentation">
             <button class="nav-link active" id="mpp-tab" data-bs-toggle="tab" data-bs-target="#mpp-pane" type="button" role="tab" aria-controls="mpp-pane" aria-selected="true" data-tab-type="mpp">MPP Content</button>
@@ -324,9 +324,12 @@
             <li class="nav-item" role="presentation">
             <button class="nav-link" id="tournament-tab" data-bs-toggle="tab" data-bs-target="#tournament-pane" type="button" role="tab" aria-controls="tournament-pane" aria-selected="false" data-tab-type="tournament">Tournament</button>
             </li>
+            <li class="nav-item" role="presentation">
+            <button class="nav-link" id="creative-tab" data-bs-toggle="tab" data-bs-target="#creative-pane" type="button" role="tab" aria-controls="creative-pane" aria-selected="false" data-tab-type="creative">Creative</button>
+            </li>
         </ul>
 
-        <!-- SUB-TAB CONTENT (MPP/Inbox/Tournament) -->
+        <!-- SUB-TAB CONTENT (MPP/Inbox/Tournament/Creative) -->
         <div class="tab-content" id="contentTabsContent">
             
             <!-- MPP Pane -->
@@ -656,6 +659,16 @@
 
                 </div>
             </div>
+            
+            <!-- CREATIVE Pane -->
+            <div class="tab-pane fade" id="creative-pane" role="tabpanel" aria-labelledby="creative-tab" tabindex="0">
+                <div id="creativeResultArea" class="d-none">
+                    <h5 class="mb-3">🎨 Creative Assets Found</h5>
+                    <div id="creativeList">
+                        <!-- Dynamic Content will be injected here -->
+                    </div>
+                </div>
+            </div>
 
         </div>
     </div>
@@ -943,6 +956,16 @@ const TOURNAMENT_MAIN_CONTENT_1_CANDIDATES = ['maincontent1', 'mainContent1', 'c
 const TOURNAMENT_TERMS_CANDIDATES = ['terms', 'termsAndConditions', 'tournamentTerms', 'tcContent'];
 const TOURNAMENT_CONDITION_CANDIDATES = ['condition', 'tournamentCondition', 'conditionField', 'miscCondition'];
 
+// --- CREATIVE CANDIDATES ---
+const CREATIVE_TITLE_CANDIDATES = ['title', 'name', 'creativeName', 'assetName', 'filename'];
+const CREATIVE_ALT_CANDIDATES = ['alt', 'altText', 'alternateText', 'description', 'caption'];
+const CREATIVE_WIDTH_CANDIDATES = ['width', 'w', 'imgWidth'];
+const CREATIVE_HEIGHT_CANDIDATES = ['height', 'h', 'imgHeight'];
+const CREATIVE_EXT_CANDIDATES = ['extension', 'ext', 'filetype', 'format', 'mimeType'];
+const CREATIVE_SIZE_CANDIDATES = ['size', 'filesize', 'length', 'contentLength', 'bytes'];
+const CREATIVE_URL_CANDIDATES = ['url', 'src', 'publicUrl', 'link', 'path'];
+const CREATIVE_BLOB_CANDIDATES = ['blob', 'blobid', 'attachment']; // Added for URL construction
+
 
 // --- Common Fetcher Elements ---
 const fetchBtn = document.getElementById('fetchBtn');
@@ -985,7 +1008,7 @@ const overlayCta = document.getElementById('overlayCta');
 const ctaNativeLink = document.getElementById('ctaNativeLink');
 const showManualTerms = document.getElementById('showManualTerms');
 
-// --- NEW Tournament Elements ---
+// --- Tournament Elements ---
 const tournamentResultArea = document.getElementById('tournamentResultArea');
 const tournamentTitle = document.getElementById('tournamentTitle');
 const tournamentDescription = document.getElementById('tournamentDescription');
@@ -999,11 +1022,16 @@ const mainContent1 = document.getElementById('mainContent1');
 const tournamentTerms = document.getElementById('tournamentTerms');
 const tournamentCondition = document.getElementById('tournamentCondition');
 
+// --- Creative Elements ---
+const creativeResultArea = document.getElementById('creativeResultArea');
+const creativeList = document.getElementById('creativeList');
+
 
 function clearResult(){ 
   mppResultArea.classList.add('d-none'); 
   inboxResultArea.classList.add('d-none');
-  tournamentResultArea.classList.add('d-none'); // Clear tournament area
+  tournamentResultArea.classList.add('d-none'); 
+  creativeResultArea.classList.add('d-none');
 
   // Clear MPP
   promoTitle.textContent = ''; 
@@ -1059,6 +1087,9 @@ function clearResult(){
   mainContent1.innerHTML = '';
   tournamentTerms.innerHTML = '';
   tournamentCondition.textContent = '';
+
+  // Clear Creative
+  creativeList.innerHTML = '';
 }
 
 function parseJSONSafe(text){
@@ -1067,7 +1098,6 @@ function parseJSONSafe(text){
 
 /**
  * Copies text to the clipboard and provides temporary visual feedback on the button.
- * Renamed to avoid conflict with checker's copy function.
  */
 function copyFetchedContent(text, buttonElement) {
     const tempInput = document.createElement('textarea');
@@ -1116,6 +1146,7 @@ function findJsonValueByCandidates(obj, candidates, visited = new WeakSet()){
       if (k.toLowerCase() === c.toLowerCase()) {
         const val = obj[k];
         if (typeof val === 'string' && val.trim()) return val.trim();
+        if (typeof val === 'number') return val.toString(); // Accept numbers for things like width/height
         if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
           if (val.text && typeof val.text === 'string' && val.text.trim()) return val.text.trim();
           if (val.html && typeof val.html === 'string' && val.html.trim()) return val.html.trim();
@@ -1153,7 +1184,8 @@ function extractXmlContent(element) {
     if(nestedValueEl && nestedValueEl.textContent.trim()) return nestedValueEl.textContent.trim();
     
     // Check attributes
-    for(const attr of ['src','url','href','value']){
+    // Added 'path' to this list to capture the path attribute from <item> tags
+    for(const attr of ['src','url','href','value','path']){
       if(element.getAttribute && element.getAttribute(attr)) return element.getAttribute(attr);
     }
     
@@ -1165,7 +1197,23 @@ function extractXmlContent(element) {
 function findXmlValueByNames(doc, candidates){
   const candidatesLower = candidates.map(c => c.toLowerCase());
   
-  const walker = doc.createTreeWalker(doc, NodeFilter.SHOW_ELEMENT, null, false);
+  // createTreeWalker accepts a root node (doc). If doc is an Element (like <item>), it walks that subtree.
+  const walker = document.createTreeWalker(doc, NodeFilter.SHOW_ELEMENT, null, false);
+  
+  // Check the root node itself first (TreeWalker starts at root but sometimes we want to check attributes of the root)
+  if (doc.nodeType === Node.ELEMENT_NODE) {
+      const localName = (doc.localName||doc.nodeName||'').toLowerCase();
+      // Check if the root element itself is a match (e.g. looking for 'url' and root has 'path' attribute)
+      if (candidatesLower.includes(localName)) {
+          const content = extractXmlContent(doc);
+          if (content) return content;
+      }
+      // Also check attributes of the root node immediately
+      for (const c of candidatesLower) {
+          if (doc.getAttribute && doc.getAttribute(c)) return doc.getAttribute(c);
+      }
+  }
+
   while(walker.nextNode()){
     const el = walker.currentNode;
     const localName = (el.localName||el.nodeName||'').toLowerCase();
@@ -1234,43 +1282,63 @@ async function fetchData(){
     }
 
     let contentType = null;
-    let testFieldMpp, testFieldInbox, testFieldTournament;
+    let testFieldMpp, testFieldInbox, testFieldTournament, testFieldCreativeExt;
 
     // --- Content Type Detection ---
     if (json) {
         testFieldInbox = findJsonValueByCandidates(json, INBOX_COMMON_TITLE_CANDIDATES);
-        testFieldTournament = findJsonValueByCandidates(json, TOURNAMENT_SYNOPSIS_TITLE_CANDIDATES); // Use synopsis title
+        testFieldTournament = findJsonValueByCandidates(json, TOURNAMENT_SYNOPSIS_TITLE_CANDIDATES); 
         testFieldMpp = findJsonValueByCandidates(json, MPP_TITLE_CANDIDATES);
+        testFieldCreativeExt = findJsonValueByCandidates(json, CREATIVE_EXT_CANDIDATES);
     } else {
         testFieldInbox = findXmlValueByNames(xmlDoc, INBOX_COMMON_TITLE_CANDIDATES);
         testFieldTournament = findXmlValueByNames(xmlDoc, TOURNAMENT_SYNOPSIS_TITLE_CANDIDATES);
         testFieldMpp = findXmlValueByNames(xmlDoc, MPP_TITLE_CANDIDATES);
+        testFieldCreativeExt = findXmlValueByNames(xmlDoc, CREATIVE_EXT_CANDIDATES);
     }
 
-    // Detection Order: Inbox -> Tournament -> MPP
+    // Detection Logic
     if (testFieldInbox) {
         contentType = 'inbox';
     } else if (testFieldTournament) {
         contentType = 'tournament';
+    } else if (testFieldCreativeExt) {
+        // If we found a file extension, it's likely a Creative Asset
+        contentType = 'creative';
     } else if (testFieldMpp) {
         contentType = 'mpp';
     } else {
-        throw new Error('Could not determine content type. No known key fields found.');
+        // Fallback detection for Creative if extension wasn't found but dimensions were
+        let w, h;
+        if (json) {
+             w = findJsonValueByCandidates(json, CREATIVE_WIDTH_CANDIDATES);
+             h = findJsonValueByCandidates(json, CREATIVE_HEIGHT_CANDIDATES);
+        } else {
+             w = findXmlValueByNames(xmlDoc, CREATIVE_WIDTH_CANDIDATES);
+             h = findXmlValueByNames(xmlDoc, CREATIVE_HEIGHT_CANDIDATES);
+        }
+        
+        if (w && h) {
+            contentType = 'creative';
+        } else {
+            throw new Error('Could not determine content type. No known key fields found.');
+        }
     }
 
     // --- Render based on content type ---
     if (contentType === 'inbox') {
         new bootstrap.Tab(document.getElementById('inbox-tab')).show();
         inboxResultArea.classList.remove('d-none');
-        inboxTitle.textContent = testFieldInbox || 'N/A'; // We already have this!
+        inboxTitle.textContent = testFieldInbox || 'N/A'; 
 
-        // --- Start Inbox Parsing ---
         let commonDesc, commonTerms, commonLandscape, commonSquare, snippetTitleVal, snippetDescVal, shortImageVal, manualTermsVal;
+        // ... existing variable declarations ...
         let toasterTitleVal, toasterDescVal, toasterImageVal, toasterCtaVal;
         let overlayTitleVal, overlayDescVal, overlayImageVal, overlayCtaVal;
         let ctaNativeLinkVal, showManualTermsVal;
         
         if(json){
+            // ... existing json extraction ...
             commonDesc = findJsonValueByCandidates(json, INBOX_COMMON_DESC_CANDIDATES) || '';
             commonTerms = findJsonValueByCandidates(json, INBOX_COMMON_TERMS_CANDIDATES) || '';
             commonLandscape = findJsonValueByCandidates(json, INBOX_COMMON_IMAGE_LANDSCAPE_CANDIDATES) || '';
@@ -1290,6 +1358,7 @@ async function fetchData(){
             ctaNativeLinkVal = findJsonValueByCandidates(json, INBOX_MISC_CTA_LINK_CANDIDATES) || '';
             showManualTermsVal = findJsonValueByCandidates(json, INBOX_MISC_SHOW_MANUAL_TERMS_CANDIDATES) || '';
         } else {
+            // ... existing xml extraction ...
             commonDesc = findXmlValueByNames(xmlDoc, INBOX_COMMON_DESC_CANDIDATES) || '';
             commonTerms = findXmlValueByNames(xmlDoc, INBOX_COMMON_TERMS_CANDIDATES) || '';
             commonLandscape = findXmlValueByNames(xmlDoc, INBOX_COMMON_IMAGE_LANDSCAPE_CANDIDATES) || '';
@@ -1310,21 +1379,19 @@ async function fetchData(){
             showManualTermsVal = findXmlValueByNames(xmlDoc, INBOX_MISC_SHOW_MANUAL_TERMS_CANDIDATES) || '';
         }
         renderInboxResult(
-            testFieldInbox, // Use the one we already found
+            testFieldInbox, 
             commonDesc, commonTerms, commonLandscape, commonSquare, 
             snippetTitleVal, snippetDescVal, shortImageVal, manualTermsVal,
             toasterTitleVal, toasterDescVal, toasterImageVal, toasterCtaVal,
             overlayTitleVal, overlayDescVal, overlayImageVal, overlayCtaVal,
             ctaNativeLinkVal, showManualTermsVal
         );
-        // --- End Inbox Parsing ---
 
     } else if (contentType === 'tournament') {
         new bootstrap.Tab(document.getElementById('tournament-tab')).show();
         tournamentResultArea.classList.remove('d-none');
-        synopsisTitle.textContent = testFieldTournament || 'N/A'; // Use the key we found
+        synopsisTitle.textContent = testFieldTournament || 'N/A'; 
 
-        // --- Start Tournament Parsing ---
         let title, description, synopsisImg, synopsisDesc, heroImg, content1, terms, condition;
         
         if(json) {
@@ -1349,17 +1416,109 @@ async function fetchData(){
 
         renderTournamentResult(
             title, description, synopsisImg, 
-            testFieldTournament, // Use the key we found
+            testFieldTournament, 
             synopsisDesc, heroImg, content1, terms, condition
         );
-        // --- End Tournament Parsing ---
+
+    } else if (contentType === 'creative') {
+        new bootstrap.Tab(document.getElementById('creative-tab')).show();
+        creativeResultArea.classList.remove('d-none');
+        
+        let itemsToProcess = [];
+        let folderMap = {}; // Map to store ID -> Folder Name
+        
+        if (json) {
+            if (Array.isArray(json)) {
+                itemsToProcess = json;
+            } else {
+                // Check for common wrapper keys that might hold a list
+                const potentialListKeys = ['items', 'assets', 'images', 'creatives', 'children', 'components'];
+                let foundList = false;
+                for (const key of potentialListKeys) {
+                    if (json[key] && Array.isArray(json[key])) {
+                        itemsToProcess = json[key];
+                        foundList = true;
+                        break;
+                    }
+                }
+                
+                // If no known key found, check if ANY property is an array of objects
+                if (!foundList) {
+                     const keys = Object.keys(json);
+                     for(const k of keys){
+                         if(Array.isArray(json[k]) && json[k].length > 0 && typeof json[k][0] === 'object'){
+                             itemsToProcess = json[k];
+                             foundList = true;
+                             break;
+                         }
+                     }
+                }
+
+                // Default to processing the root object as a single item if no list found
+                if (!foundList) {
+                    itemsToProcess = [json];
+                }
+            }
+        } else {
+            // For XML, find all <item> tags recursively
+            const allItems = Array.from(xmlDoc.getElementsByTagName('item'));
+            
+            // 1. Build Folder Map (ID -> Name)
+            allItems.forEach(el => {
+                const id = el.getAttribute('id');
+                const name = el.getAttribute('name');
+                if (id && name) {
+                    folderMap[id] = name;
+                }
+            });
+
+            // 2. Filter out "media folder" items and keep only actual assets
+            itemsToProcess = allItems.filter(item => {
+                const template = item.getAttribute('template');
+                const isFolder = template && template.toLowerCase() === 'media folder';
+                
+                // Double-check: Ensure it has asset-like properties (blob or width)
+                const hasBlob = findXmlValueByNames(item, CREATIVE_BLOB_CANDIDATES);
+                const hasWidth = findXmlValueByNames(item, CREATIVE_WIDTH_CANDIDATES);
+                
+                return !isFolder && (hasBlob || hasWidth);
+            });
+        }
+
+        const extractedResults = itemsToProcess.map((item, index) => {
+             // Helper to scope search to the current item
+             const extract = (candidates) => json ? findJsonValueByCandidates(item, candidates) : findXmlValueByNames(item, candidates);
+             
+             // Determine Folder Name
+             let folderName = 'General Assets';
+             if (!json) {
+                 const parentId = item.getAttribute('parentid');
+                 if (parentId && folderMap[parentId]) {
+                     folderName = folderMap[parentId];
+                 }
+             }
+
+             return {
+                 id: index,
+                 title: extract(CREATIVE_TITLE_CANDIDATES) || 'Untitled Asset',
+                 alt: extract(CREATIVE_ALT_CANDIDATES) || '',
+                 width: extract(CREATIVE_WIDTH_CANDIDATES) || '',
+                 height: extract(CREATIVE_HEIGHT_CANDIDATES) || '',
+                 ext: extract(CREATIVE_EXT_CANDIDATES) || '',
+                 size: extract(CREATIVE_SIZE_CANDIDATES) || '',
+                 url: extract(CREATIVE_URL_CANDIDATES) || '',
+                 blob: extract(CREATIVE_BLOB_CANDIDATES) || '',
+                 folderName: folderName // Add folder name to result
+             };
+        });
+
+        renderCreativeResult(extractedResults);
 
     } else if (contentType === 'mpp') {
         new bootstrap.Tab(document.getElementById('mpp-tab')).show();
         mppResultArea.classList.remove('d-none');
-        promoTitle.textContent = testFieldMpp || 'N/A'; // Use the one we found
+        promoTitle.textContent = testFieldMpp || 'N/A'; 
 
-        // --- Start MPP Parsing ---
         let headline, image, detailed, terms;
         if(json){
           headline = findJsonValueByCandidates(json, MPP_IMAGE_HEADLINE_CANDIDATES) || '';
@@ -1373,13 +1532,12 @@ async function fetchData(){
           terms = findXmlValueByNames(xmlDoc, MPP_TERMS_CANDIDATES) || '';
         }
         renderMppResult(
-            testFieldMpp, // Use the one we found
+            testFieldMpp, 
             headline, image, detailed, terms
         );
-        // --- End MPP Parsing ---
     }
     
-    fetcherErrorDiv.textContent = ''; // Clear 'Fetching...' message
+    fetcherErrorDiv.textContent = ''; 
 
   }catch(err){
     clearResult();
@@ -1519,7 +1677,7 @@ function renderInboxResult(
     inboxResultArea.classList.remove('d-none');
 }
 
-// --- NEW Tournament Render Function ---
+// --- Tournament Render Function ---
 function renderTournamentResult(
     title, description, synopsisImg, 
     synopsisTitleVal, synopsisDesc, 
@@ -1563,6 +1721,191 @@ function renderTournamentResult(
 
     fetcherErrorDiv.textContent = '';
     tournamentResultArea.classList.remove('d-none');
+}
+
+// --- Creative Render Function (REFACTORED) ---
+function renderCreativeResult(results) {
+    creativeList.innerHTML = ''; // Clear previous results
+
+    if (!results || results.length === 0) {
+        creativeList.innerHTML = '<div class="text-center p-3 text-muted">No creative assets found.</div>';
+        creativeResultArea.classList.remove('d-none');
+        return;
+    }
+
+    // Group results by folderName
+    const groupedResults = results.reduce((acc, item) => {
+        const folder = item.folderName || 'General Assets';
+        if (!acc[folder]) {
+            acc[folder] = [];
+        }
+        acc[folder].push(item);
+        return acc;
+    }, {});
+
+    // Sort folders alphabetically
+    const sortedFolders = Object.keys(groupedResults).sort();
+
+    let globalIndex = 0;
+    let folderIndex = 0;
+
+    sortedFolders.forEach(folderName => {
+        folderIndex++;
+        // Sort items within the folder alphabetically by title
+        const folderItems = groupedResults[folderName].sort((a, b) => {
+            const titleA = (a.title || '').toLowerCase();
+            const titleB = (b.title || '').toLowerCase();
+            return titleA.localeCompare(titleB);
+        });
+        
+        const itemCount = folderItems.length;
+        const collapseId = `folderCollapse_${folderIndex}`;
+
+        // Check if any item in this folder exceeds 100,000 bytes
+        const hasLargeItem = folderItems.some(item => {
+            const sizeNum = parseInt(item.size, 10);
+            return !isNaN(sizeNum) && sizeNum > 100000;
+        });
+
+        // Determine styling based on size check
+        const themeColor = hasLargeItem ? 'danger' : 'primary';
+        const folderWarning = hasLargeItem ? '<span class="badge bg-danger ms-2">⚠️ Check Size</span>' : '';
+
+        // Create Folder Container
+        const folderContainer = document.createElement('div');
+        folderContainer.className = 'mb-4';
+
+        // 1. Clickable Folder Header with Count and Dynamic Color
+        folderContainer.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center p-2 bg-opacity-10 bg-${themeColor} rounded border border-${themeColor} border-opacity-25 mb-3" 
+                 data-bs-toggle="collapse" 
+                 data-bs-target="#${collapseId}" 
+                 aria-expanded="false" 
+                 aria-controls="${collapseId}" 
+                 style="cursor: pointer; user-select: none;">
+                <div>
+                    <h5 class="text-${themeColor} mb-0 d-inline-block fw-bold"><span class="icon me-2">📂</span>${folderName}</h5>
+                    <span class="badge bg-secondary rounded-pill ms-2">${itemCount} item${itemCount !== 1 ? 's' : ''}</span>
+                    ${folderWarning}
+                </div>
+                <span class="text-${themeColor} small">▼ Show/Hide</span>
+            </div>
+        `;
+
+        // 2. Collapsible Content Area
+        const collapseDiv = document.createElement('div');
+        collapseDiv.id = collapseId;
+        collapseDiv.className = 'collapse'; // Default to open
+        
+        // 3. Grid Row Container (for 4 items per row)
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'row g-3'; // g-3 adds spacing between grid items
+
+        // Render Items
+        folderItems.forEach((item) => {
+            globalIndex++;
+            // Create unique IDs for copy buttons
+            const titleId = `creTitle_${globalIndex}`;
+            const altId = `creAlt_${globalIndex}`;
+            const dimId = `creDim_${globalIndex}`;
+            const extId = `creExt_${globalIndex}`;
+            const sizeId = `creSize_${globalIndex}`;
+            
+            let dimText = 'N/A';
+            if (item.width && item.height) {
+                dimText = item.width + ' x ' + item.height;
+            } else if (item.width) {
+                dimText = 'W: ' + item.width;
+            } else if (item.height) {
+                dimText = 'H: ' + item.height;
+            }
+
+            // Size Validation Logic
+            let sizeHtml = 'N/A';
+            let sizeClass = '';
+            let cardBorderClass = 'border-info'; // Default border
+            
+            if (item.size) {
+                const sizeNum = parseInt(item.size, 10);
+                sizeHtml = item.size + ' bytes';
+                
+                if (!isNaN(sizeNum) && sizeNum > 100000) {
+                    sizeClass = 'text-danger fw-bold';
+                    sizeHtml += ' <span class="badge bg-danger ms-1">!</span>';
+                    cardBorderClass = 'border-danger'; // Change card border to red if this specific item is large
+                }
+            }
+
+            // URL Construction Logic
+            let previewUrl = item.url;
+            
+            if (item.blob) {
+                const cleanExt = (item.ext || 'jpg').replace(/^\./, '');
+                previewUrl = `https://scmedia-us.itsfogo.com/$-$/${item.blob}.${cleanExt}`;
+            }
+
+            // 4. Column Wrapper (Responsive Grid)
+            const colDiv = document.createElement('div');
+            // col-xl-3 = 4 per row on extra large screens
+            // col-lg-4 = 3 per row on large screens
+            // col-md-6 = 2 per row on medium screens
+            colDiv.className = 'col-xl-3 col-lg-4 col-md-6 col-12';
+
+            colDiv.innerHTML = `
+                <div class="card-modern h-100 border-start border-4 ${cardBorderClass} p-3 d-flex flex-column" style="border-color: var(--border-color) !important;">
+                    <div class="d-flex justify-content-between align-items-center mb-2 border-bottom pb-1">
+                        <h6 class="mb-0 text-info small">#${globalIndex}</h6>
+                        <span class="badge bg-secondary" style="font-size: 0.7rem;">${item.ext || 'UNK'}</span>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="data-label small">Title</span>
+                            <button class="btn btn-sm btn-outline-primary copy-btn py-0 px-1" style="font-size: 0.7rem;" data-target="${titleId}">Copy</button>
+                        </div>
+                        <p id="${titleId}" class="mb-0 px-1 fw-bold text-break small" style="line-height: 1.2;">${item.title}</p>
+                    </div>
+
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="data-label small">Alt</span>
+                            <button class="btn btn-sm btn-outline-primary copy-btn py-0 px-1" style="font-size: 0.7rem;" data-target="${altId}">Copy</button>
+                        </div>
+                        <p id="${altId}" class="mb-0 px-1 small text-truncate" title="${item.alt}">${item.alt || 'N/A'}</p>
+                    </div>
+
+                    <div class="row g-1 mb-2">
+                        <div class="col-6">
+                            <span class="data-label small d-block">Dim</span>
+                            <span id="${dimId}" class="small">${dimText}</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="data-label small d-block">Size</span>
+                            <span id="${sizeId}" class="small ${sizeClass}">${sizeHtml}</span>
+                        </div>
+                    </div>
+
+                    <div class="mt-auto pt-2 border-top">
+                        ${previewUrl ? 
+                            `<div class="text-center mb-1" style="height: 120px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.03); border-radius: 4px;">
+                                <img src="${previewUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain;" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'text-muted small\\'>Load Failed</span>'" alt="Preview">
+                             </div>
+                             <div class="text-end"><a href="${previewUrl}" target="_blank" class="small-muted" style="font-size: 0.75rem;">Open Link ↗</a></div>` 
+                            : '<div class="text-muted fst-italic small text-center py-4">No image URL found.</div>'
+                        }
+                    </div>
+                </div>
+            `;
+            rowDiv.appendChild(colDiv);
+        });
+
+        collapseDiv.appendChild(rowDiv);
+        folderContainer.appendChild(collapseDiv);
+        creativeList.appendChild(folderContainer);
+    });
+
+    fetcherErrorDiv.textContent = '';
+    creativeResultArea.classList.remove('d-none');
 }
 
 
